@@ -1,0 +1,45 @@
+{
+  "name": "service-booking-platform",
+  "version": "1.0.0",
+  "description": "Production-level service booking platform MVP with Customer & Worker modules",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "seed": "node src/seeds/services.seed.js && node src/seeds/providers.seed.js",
+    "seed:services": "node src/seeds/services.seed.js",
+    "seed:providers": "node src/seeds/providers.seed.js",
+    "test": "jest --forceExit --detectOpenHandles",
+    "test:coverage": "jest --forceExit --detectOpenHandles --coverage",
+    "test:watch": "jest --watchAll",
+    "lint": "eslint ."
+  },
+  "keywords": ["service-booking", "node", "express", "mongodb", "jwt"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "http-status-codes": "^2.3.0",
+    "joi": "^17.13.3",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.5",
+    "morgan": "^1.10.0",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "mongodb-memory-server": "^10.4.0",
+    "nodemon": "^3.1.9",
+    "supertest": "^7.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/tests/**/*.test.js"],
+    "testTimeout": 30000,
+    "coveragePathIgnorePatterns": ["/node_modules/", "/tests/"]
+  }
+}
