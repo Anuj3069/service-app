@@ -350,6 +350,10 @@ describe('⚡ Instant Booking Flow — End-to-End', () => {
     const Provider = require('../../src/modules/provider/provider.model');
     await Provider.updateMany({}, { isAvailable: false });
 
+    // Clear provider cache since we updated MongoDB directly (bypassing repository)
+    const cache = require('../../src/shared/utils/cache');
+    await cache.delPattern('cache:providers:*');
+
     // Try instant booking - should fail
     const res = await request(app)
       .post('/api/v1/user/instant-booking')
@@ -363,5 +367,6 @@ describe('⚡ Instant Booking Flow — End-to-End', () => {
 
     // Restore availability for other tests
     await Provider.updateMany({}, { isAvailable: true });
+    await cache.delPattern('cache:providers:*');
   });
 });

@@ -2,19 +2,22 @@
  * src/shared/middleware/auth.middleware.js — JWT Authentication & Authorization
  *
  * authenticate: Verifies JWT token from Authorization header
+ *               Checks Redis blacklist for revoked tokens (logout support)
  * authorize:    Role-based access control guard
  */
 
 const jwt = require('jsonwebtoken');
 const config = require('../../config');
 const AppError = require('../utils/api-error');
+const tokenBlacklist = require('../utils/token-blacklist');
 
 /**
  * Middleware: Verify JWT access token
  * Extracts token from "Authorization: Bearer <token>" header
+ * Checks if the token has been blacklisted (revoked via logout)
  * Attaches decoded user payload to req.user
  */
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
   try {
     // 1. Extract token
     const authHeader = req.headers.authorization;
@@ -27,10 +30,16 @@ const authenticate = (req, res, next) => {
       throw AppError.unauthorized('Access token is malformed.');
     }
 
-    // 2. Verify token
+    // 2. Check if token is blacklisted (revoked via logout)
+    const isBlacklisted = await tokenBlacklist.isBlacklisted(token);
+    if (isBlacklisted) {
+      throw AppError.unauthorized('Token has been revoked. Please log in again.');
+    }
+
+    // 3. Verify token
     const decoded = jwt.verify(token, config.jwt.secret);
 
-    // 3. Attach user info to request
+    // 4. Attach user info to request
     req.user = {
       id: decoded.id,
       email: decoded.email,

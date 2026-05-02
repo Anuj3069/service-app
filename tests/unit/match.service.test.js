@@ -28,6 +28,9 @@ afterEach(async () => {
   for (const key in collections) {
     await collections[key].deleteMany({});
   }
+  // Clear Redis cache to prevent stale data between tests
+  const { flushRedis } = require('../../src/config/redis');
+  await flushRedis();
 });
 
 afterAll(async () => {

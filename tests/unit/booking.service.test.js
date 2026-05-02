@@ -29,6 +29,9 @@ afterEach(async () => {
   for (const key in collections) {
     await collections[key].deleteMany({});
   }
+  // Clear Redis cache to prevent stale data between tests
+  const { flushRedis } = require('../../src/config/redis');
+  await flushRedis();
 });
 
 afterAll(async () => {
@@ -134,8 +137,8 @@ describe('BookingService', () => {
 
     it('PENDING → ACCEPTED (valid)', async () => {
       const result = await bookingService.acceptBooking(provider._id, bookingId);
-      expect(result.status).toBe('accepted');
-      expect(result.acceptedAt).toBeDefined();
+      expect(result.booking.status).toBe('accepted');
+      expect(result.booking.acceptedAt).toBeDefined();
     });
 
     it('PENDING → REJECTED (valid)', async () => {

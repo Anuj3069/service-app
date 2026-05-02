@@ -2,6 +2,7 @@
  * src/modules/booking/booking.controller.js — Booking HTTP Handlers
  *
  * Handles both Customer and Worker booking endpoints.
+ * Uses Redis-backed SocketStore for socket lookups and ExpiryScheduler for booking expiry.
  */
 
 const asyncHandler = require('../../shared/middleware/async-handler');
@@ -9,6 +10,7 @@ const ApiResponse = require('../../shared/utils/api-response');
 const bookingService = require('./booking.service');
 const providerRepository = require('../provider/provider.repository');
 const AppError = require('../../shared/utils/api-error');
+const expiryScheduler = require('../../shared/utils/expiry-scheduler');
 
 // ─────────────────────────────────────────────────────────────
 //  CUSTOMER ENDPOINTS
@@ -30,13 +32,13 @@ const createBooking = asyncHandler(async (req, res) => {
 const createInstantBooking = asyncHandler(async (req, res) => {
   const { booking, candidateUserIds } = await bookingService.createInstantBooking(req.user.id, req.body);
 
-  // Emit socket events to candidate providers
+  // Emit socket events to candidate providers (via Redis-backed SocketStore)
   const io = req.app.get('io');
-  const userSockets = req.app.get('userSockets');
+  const socketStore = req.app.get('socketStore');
 
-  if (io && userSockets && candidateUserIds) {
-    candidateUserIds.forEach((userId) => {
-      const socketId = userSockets.get(userId.toString());
+  if (io && socketStore && candidateUserIds) {
+    for (const userId of candidateUserIds) {
+      const socketId = await socketStore.get(userId.toString());
       if (socketId) {
         console.log(`[SOCKET DEBUG] Emitting 'new-booking-request' to userId: ${userId} (socketId: ${socketId})`);
         io.to(socketId).emit('new-booking-request', {
@@ -49,36 +51,11 @@ const createInstantBooking = asyncHandler(async (req, res) => {
       } else {
         console.log(`[SOCKET DEBUG] User ${userId} is not connected (no socketId found).`);
       }
-    });
+    }
   }
 
-  // Step 9: Handle Expiry via Timeout
-  const expiryTimeMs = new Date(booking.expiresAt).getTime() - Date.now();
-  if (expiryTimeMs > 0) {
-    setTimeout(async () => {
-      try {
-        const BookingModel = require('./booking.model');
-        const expiredBooking = await BookingModel.findOneAndUpdate(
-          { _id: booking._id, status: 'requested' },
-          { status: 'expired' },
-          { new: true }
-        );
-
-        if (expiredBooking && io && userSockets) {
-          // booking.userId might be an ObjectId or populated, but we passed req.user.id
-          const customerSocketId = userSockets.get(req.user.id.toString());
-          if (customerSocketId) {
-            io.to(customerSocketId).emit('booking-expired', {
-              bookingId: booking._id,
-              message: 'No providers accepted your request in time.',
-            });
-          }
-        }
-      } catch (err) {
-        console.error('Error auto-expiring instant booking:', err);
-      }
-    }, expiryTimeMs);
-  }
+  // Schedule expiry via Redis TTL (replaces fragile setTimeout)
+  await expiryScheduler.schedule(booking._id.toString(), booking.expiresAt);
 
   ApiResponse.created(res, { booking, candidateUserIds }, 'Instant booking requested. Waiting for a provider to accept.');
 });
@@ -138,28 +115,30 @@ const acceptBooking = asyncHandler(async (req, res) => {
   if (result.type === 'INSTANT') {
     const { booking, candidateUserIds } = result;
     const io = req.app.get('io');
-    const userSockets = req.app.get('userSockets');
+    const socketStore = req.app.get('socketStore');
+
+    // Cancel the Redis expiry timer since the booking was accepted
+    await expiryScheduler.cancel(req.params.id);
     
-    if (io && userSockets) {
-      // Step 7: Notify other providers
-      candidateUserIds.forEach(candidateUserId => {
+    if (io && socketStore) {
+      // Notify other providers that booking is taken
+      for (const candidateUserId of candidateUserIds) {
         if (candidateUserId !== req.user.id.toString()) {
-          const socketId = userSockets.get(candidateUserId);
+          const socketId = await socketStore.get(candidateUserId);
           if (socketId) {
             io.to(socketId).emit('booking-taken', { bookingId: booking._id });
           }
         }
-      });
+      }
       
-      // Step 8: Notify customer
-      const customerSocketId = userSockets.get(booking.userId._id.toString());
+      // Notify customer that booking is confirmed
+      const customerSocketId = await socketStore.get(booking.userId._id.toString());
       if (customerSocketId) {
-        // Fetch provider user details for the notification if needed
         io.to(customerSocketId).emit('booking-confirmed', {
           bookingId: booking._id,
           provider: {
             id: providerId,
-            name: req.user.name || 'Provider', // Fallback if req.user.name is not set
+            name: req.user.name || 'Provider',
           },
           status: 'ACCEPTED'
         });
