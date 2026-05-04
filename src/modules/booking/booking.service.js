@@ -100,7 +100,7 @@ class BookingService {
 
     // 3. Create booking
     const requestedAt = new Date();
-    const expiresAt = new Date(requestedAt.getTime() + 60000); // 60 seconds from now
+    const expiresAt = new Date(requestedAt.getTime() + config.booking.instantExpirySeconds * 1000);
 
     const booking = await bookingRepository.create({
       userId,
@@ -148,8 +148,11 @@ class BookingService {
       throw AppError.forbidden('You do not have access to this booking.');
     }
 
-    // Check and update expired status
-    if (booking.status === BOOKING_STATUS.PENDING && booking.isExpired) {
+    // Check and update expired status (handles both PENDING and REQUESTED)
+    if (
+      (booking.status === BOOKING_STATUS.PENDING || booking.status === BOOKING_STATUS.REQUESTED) &&
+      booking.isExpired
+    ) {
       await bookingRepository.updateById(bookingId, { status: BOOKING_STATUS.EXPIRED });
       booking.status = BOOKING_STATUS.EXPIRED;
     }
@@ -303,8 +306,11 @@ class BookingService {
       throw AppError.notFound('Booking not found.');
     }
 
-    if (booking.providerId._id.toString() !== providerId.toString()) {
-      throw AppError.forbidden('This booking is not assigned to you.');
+    // For scheduled bookings, check ownership
+    if (booking.type !== 'INSTANT') {
+      if (!booking.providerId || booking.providerId._id.toString() !== providerId.toString()) {
+        throw AppError.forbidden('This booking is not assigned to you.');
+      }
     }
 
     this._validateTransition(booking.status, BOOKING_STATUS.REJECTED);
@@ -331,7 +337,8 @@ class BookingService {
       throw AppError.notFound('Booking not found.');
     }
 
-    if (booking.providerId._id.toString() !== providerId.toString()) {
+    // For instant bookings, providerId is set after acceptance
+    if (!booking.providerId || booking.providerId._id.toString() !== providerId.toString()) {
       throw AppError.forbidden('This booking is not assigned to you.');
     }
 
@@ -377,13 +384,29 @@ class BookingService {
     try {
       const expired = await bookingRepository.findExpiredPending();
       const providerExpired = expired.filter(
-        (b) => b.providerId.toString() === providerId.toString()
+        (b) => b.providerId && b.providerId.toString() === providerId.toString()
       );
 
-      if (providerExpired.length > 0) {
-        const ids = providerExpired.map((b) => b._id);
-        await bookingRepository.markExpired(ids);
-        logger.info(`⏰ Auto-expired ${ids.length} stale bookings for provider: ${providerId}`);
+      // Also expire instant bookings where this provider is a candidate
+      const expiredInstant = await bookingRepository.findExpiredRequested();
+      const candidateExpired = expiredInstant.filter(
+        (b) => b.candidateProviders && b.candidateProviders.some(
+          (cp) => (cp._id ? cp._id.toString() : cp.toString()) === providerId.toString()
+        )
+      );
+
+      const allExpiredIds = [
+        ...providerExpired.map((b) => b._id),
+        ...candidateExpired.map((b) => b._id),
+      ];
+
+      // Deduplicate
+      const uniqueIds = [...new Set(allExpiredIds.map(id => id.toString()))]
+        .map(id => allExpiredIds.find(eid => eid.toString() === id));
+
+      if (uniqueIds.length > 0) {
+        await bookingRepository.markExpired(uniqueIds);
+        logger.info(`⏰ Auto-expired ${uniqueIds.length} stale bookings for provider: ${providerId}`);
       }
     } catch (error) {
       logger.error('Error expiring stale bookings:', error);

@@ -115,6 +115,17 @@ class BookingRepository {
   }
 
   /**
+   * Find expired instant bookings (requested status that passed expiresAt)
+   */
+  async findExpiredRequested() {
+    return Booking.find({
+      status: 'requested',
+      type: 'INSTANT',
+      expiresAt: { $lte: new Date() },
+    });
+  }
+
+  /**
    * Bulk update expired bookings to expired status
    */
   async markExpired(bookingIds) {

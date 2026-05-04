@@ -9,6 +9,8 @@ const ApiResponse = require('../../shared/utils/api-response');
 const bookingService = require('./booking.service');
 const providerRepository = require('../provider/provider.repository');
 const AppError = require('../../shared/utils/api-error');
+const logger = require('../../config/logger');
+const User = require('../auth/auth.model');
 
 // ─────────────────────────────────────────────────────────────
 //  CUSTOMER ENDPOINTS
@@ -38,7 +40,7 @@ const createInstantBooking = asyncHandler(async (req, res) => {
     candidateUserIds.forEach((userId) => {
       const socketId = userSockets.get(userId.toString());
       if (socketId) {
-        console.log(`[SOCKET DEBUG] Emitting 'new-booking-request' to userId: ${userId} (socketId: ${socketId})`);
+        logger.info(`[SOCKET] Emitting 'new-booking-request' to userId: ${userId} (socketId: ${socketId})`);
         io.to(socketId).emit('new-booking-request', {
           bookingId: booking._id,
           service: booking.serviceId,
@@ -47,12 +49,12 @@ const createInstantBooking = asyncHandler(async (req, res) => {
           expiresAt: booking.expiresAt,
         });
       } else {
-        console.log(`[SOCKET DEBUG] User ${userId} is not connected (no socketId found).`);
+        logger.warn(`[SOCKET] User ${userId} is not connected (no socketId found).`);
       }
     });
   }
 
-  // Step 9: Handle Expiry via Timeout
+  // Handle Expiry via Timeout
   const expiryTimeMs = new Date(booking.expiresAt).getTime() - Date.now();
   if (expiryTimeMs > 0) {
     setTimeout(async () => {
@@ -65,17 +67,17 @@ const createInstantBooking = asyncHandler(async (req, res) => {
         );
 
         if (expiredBooking && io && userSockets) {
-          // booking.userId might be an ObjectId or populated, but we passed req.user.id
           const customerSocketId = userSockets.get(req.user.id.toString());
           if (customerSocketId) {
             io.to(customerSocketId).emit('booking-expired', {
               bookingId: booking._id,
               message: 'No providers accepted your request in time.',
             });
+            logger.info(`[SOCKET] Emitted 'booking-expired' for booking: ${booking._id}`);
           }
         }
       } catch (err) {
-        console.error('Error auto-expiring instant booking:', err);
+        logger.error('Error auto-expiring instant booking:', err);
       }
     }, expiryTimeMs);
   }
@@ -141,28 +143,41 @@ const acceptBooking = asyncHandler(async (req, res) => {
     const userSockets = req.app.get('userSockets');
     
     if (io && userSockets) {
-      // Step 7: Notify other providers
+      // Notify other candidate providers that the booking was taken
       candidateUserIds.forEach(candidateUserId => {
         if (candidateUserId !== req.user.id.toString()) {
           const socketId = userSockets.get(candidateUserId);
           if (socketId) {
             io.to(socketId).emit('booking-taken', { bookingId: booking._id });
+            logger.info(`[SOCKET] Emitted 'booking-taken' to userId: ${candidateUserId}`);
           }
         }
       });
       
-      // Step 8: Notify customer
-      const customerSocketId = userSockets.get(booking.userId._id.toString());
+      // Fetch the accepting worker's name from the User model
+      let workerName = 'Provider';
+      try {
+        const workerUser = await User.findById(req.user.id).select('name');
+        if (workerUser) workerName = workerUser.name;
+      } catch (err) {
+        logger.warn('Could not fetch worker name for booking-confirmed event:', err.message);
+      }
+
+      // Notify the customer that their booking has been confirmed
+      const customerUserId = booking.userId._id
+        ? booking.userId._id.toString()
+        : booking.userId.toString();
+      const customerSocketId = userSockets.get(customerUserId);
       if (customerSocketId) {
-        // Fetch provider user details for the notification if needed
         io.to(customerSocketId).emit('booking-confirmed', {
           bookingId: booking._id,
           provider: {
             id: providerId,
-            name: req.user.name || 'Provider', // Fallback if req.user.name is not set
+            name: workerName,
           },
           status: 'ACCEPTED'
         });
+        logger.info(`[SOCKET] Emitted 'booking-confirmed' to customer: ${customerUserId}`);
       }
     }
     return ApiResponse.ok(res, { booking, type: 'INSTANT' }, 'Instant booking accepted successfully.');

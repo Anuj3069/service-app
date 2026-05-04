@@ -144,7 +144,8 @@ bookingSchema.pre('find', function () {
 
 // ── VIRTUAL: isExpired ──────────────────────────────────────
 bookingSchema.virtual('isExpired').get(function () {
-  if (this.status !== BOOKING_STATUS.PENDING) return false;
+  const expirableStatuses = [BOOKING_STATUS.PENDING, BOOKING_STATUS.REQUESTED];
+  if (!expirableStatuses.includes(this.status)) return false;
   if (!this.expiresAt) return false;
   return new Date() > this.expiresAt;
 });

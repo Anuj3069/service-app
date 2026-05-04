@@ -27,6 +27,7 @@ const config = {
   // Booking
   booking: {
     expiryMinutes: parseInt(process.env.BOOKING_EXPIRY_MINUTES, 10) || 2,
+    instantExpirySeconds: parseInt(process.env.INSTANT_BOOKING_EXPIRY_SECONDS, 10) || 300, // 5 minutes
   },
 
   // Logging
