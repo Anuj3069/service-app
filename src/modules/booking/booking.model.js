@@ -131,10 +131,10 @@ bookingSchema.index({ userId: 1, status: 1, createdAt: -1 });
 // Worker's assigned bookings
 bookingSchema.index({ providerId: 1, status: 1, createdAt: -1 });
 
-// TTL index for auto-expiring PENDING bookings
-// MongoDB will automatically delete documents where expiresAt has passed
-// We'll handle expiry in our service layer for more control
-bookingSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// Index on expiresAt for query performance (Redis handles actual expiry logic)
+// NOTE: Previously used TTL index (expireAfterSeconds: 0) which would DELETE documents.
+// Now Redis keyspace notifications handle expiry — we only UPDATE status, never delete.
+bookingSchema.index({ expiresAt: 1 });
 
 // ── PRE-SAVE: Auto-expire check ────────────────────────────
 bookingSchema.pre('find', function () {

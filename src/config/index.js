@@ -16,6 +16,9 @@ const config = {
   // MongoDB
   mongoUri: process.env.MONGODB_URI || 'mongodb://localhost:27017/service-booking-dev',
 
+  // Redis
+  redisUrl: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
+
   // JWT
   jwt: {
     secret: process.env.JWT_SECRET,

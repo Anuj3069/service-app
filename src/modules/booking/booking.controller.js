@@ -2,6 +2,7 @@
  * src/modules/booking/booking.controller.js — Booking HTTP Handlers
  *
  * Handles both Customer and Worker booking endpoints.
+ * All socket/notification logic is delegated to Redis-backed services.
  */
 
 const asyncHandler = require('../../shared/middleware/async-handler');
@@ -12,16 +13,53 @@ const AppError = require('../../shared/utils/api-error');
 const logger = require('../../config/logger');
 const User = require('../auth/auth.model');
 
+// Redis-backed services
+const notificationService = require('../../shared/services/notification.service');
+const expiryService = require('../../shared/services/expiry.service');
+
 // ─────────────────────────────────────────────────────────────
 //  CUSTOMER ENDPOINTS
 // ─────────────────────────────────────────────────────────────
 
 /**
  * POST /api/v1/user/bookings
- * Create a new booking
+ * Create a new scheduled booking
  */
 const createBooking = asyncHandler(async (req, res) => {
   const booking = await bookingService.createBooking(req.user.id, req.body);
+
+  // Schedule expiry via Redis TTL (for scheduled bookings)
+  if (booking.expiresAt) {
+    const expiryMs = new Date(booking.expiresAt).getTime() - Date.now();
+    if (expiryMs > 0) {
+      await expiryService.scheduleExpiry(booking._id.toString(), expiryMs, {
+        userId: req.user.id,
+        type: 'SCHEDULED',
+      });
+    }
+  }
+
+  // Notify the assigned worker about the new scheduled booking
+  if (booking.providerId) {
+    const provider = await providerRepository.findById(
+      booking.providerId._id || booking.providerId
+    );
+    if (provider && provider.userId) {
+      const workerUserId = provider.userId._id
+        ? provider.userId._id.toString()
+        : provider.userId.toString();
+
+      await notificationService.notifyNewScheduledBooking(workerUserId, {
+        bookingId: booking._id,
+        service: booking.serviceId,
+        date: booking.date,
+        slot: booking.slot,
+        price: booking.price,
+        expiresAt: booking.expiresAt,
+      });
+    }
+  }
+
   ApiResponse.created(res, { booking }, 'Booking created successfully. Waiting for provider confirmation.');
 });
 
@@ -32,54 +70,24 @@ const createBooking = asyncHandler(async (req, res) => {
 const createInstantBooking = asyncHandler(async (req, res) => {
   const { booking, candidateUserIds } = await bookingService.createInstantBooking(req.user.id, req.body);
 
-  // Emit socket events to candidate providers
-  const io = req.app.get('io');
-  const userSockets = req.app.get('userSockets');
-
-  if (io && userSockets && candidateUserIds) {
-    candidateUserIds.forEach((userId) => {
-      const socketId = userSockets.get(userId.toString());
-      if (socketId) {
-        logger.info(`[SOCKET] Emitting 'new-booking-request' to userId: ${userId} (socketId: ${socketId})`);
-        io.to(socketId).emit('new-booking-request', {
-          bookingId: booking._id,
-          service: booking.serviceId,
-          price: booking.price,
-          requestedAt: booking.requestedAt,
-          expiresAt: booking.expiresAt,
-        });
-      } else {
-        logger.warn(`[SOCKET] User ${userId} is not connected (no socketId found).`);
-      }
+  // Notify candidate workers via Redis Pub/Sub
+  if (candidateUserIds && candidateUserIds.length > 0) {
+    await notificationService.notifyNewBookingRequest(candidateUserIds, {
+      bookingId: booking._id,
+      service: booking.serviceId,
+      price: booking.price,
+      requestedAt: booking.requestedAt,
+      expiresAt: booking.expiresAt,
     });
   }
 
-  // Handle Expiry via Timeout
-  const expiryTimeMs = new Date(booking.expiresAt).getTime() - Date.now();
-  if (expiryTimeMs > 0) {
-    setTimeout(async () => {
-      try {
-        const BookingModel = require('./booking.model');
-        const expiredBooking = await BookingModel.findOneAndUpdate(
-          { _id: booking._id, status: 'requested' },
-          { status: 'expired' },
-          { new: true }
-        );
-
-        if (expiredBooking && io && userSockets) {
-          const customerSocketId = userSockets.get(req.user.id.toString());
-          if (customerSocketId) {
-            io.to(customerSocketId).emit('booking-expired', {
-              bookingId: booking._id,
-              message: 'No providers accepted your request in time.',
-            });
-            logger.info(`[SOCKET] Emitted 'booking-expired' for booking: ${booking._id}`);
-          }
-        }
-      } catch (err) {
-        logger.error('Error auto-expiring instant booking:', err);
-      }
-    }, expiryTimeMs);
+  // Schedule expiry via Redis TTL (replaces setTimeout)
+  const expiryMs = new Date(booking.expiresAt).getTime() - Date.now();
+  if (expiryMs > 0) {
+    await expiryService.scheduleExpiry(booking._id.toString(), expiryMs, {
+      userId: req.user.id,
+      type: 'INSTANT',
+    });
   }
 
   ApiResponse.created(res, { booking, candidateUserIds }, 'Instant booking requested. Waiting for a provider to accept.');
@@ -139,52 +147,60 @@ const acceptBooking = asyncHandler(async (req, res) => {
 
   if (result.type === 'INSTANT') {
     const { booking, candidateUserIds } = result;
-    const io = req.app.get('io');
-    const userSockets = req.app.get('userSockets');
-    
-    if (io && userSockets) {
-      // Notify other candidate providers that the booking was taken
-      candidateUserIds.forEach(candidateUserId => {
-        if (candidateUserId !== req.user.id.toString()) {
-          const socketId = userSockets.get(candidateUserId);
-          if (socketId) {
-            io.to(socketId).emit('booking-taken', { bookingId: booking._id });
-            logger.info(`[SOCKET] Emitted 'booking-taken' to userId: ${candidateUserId}`);
-          }
-        }
-      });
-      
-      // Fetch the accepting worker's name from the User model
-      let workerName = 'Provider';
-      try {
-        const workerUser = await User.findById(req.user.id).select('name');
-        if (workerUser) workerName = workerUser.name;
-      } catch (err) {
-        logger.warn('Could not fetch worker name for booking-confirmed event:', err.message);
-      }
 
-      // Notify the customer that their booking has been confirmed
-      const customerUserId = booking.userId._id
-        ? booking.userId._id.toString()
-        : booking.userId.toString();
-      const customerSocketId = userSockets.get(customerUserId);
-      if (customerSocketId) {
-        io.to(customerSocketId).emit('booking-confirmed', {
-          bookingId: booking._id,
-          provider: {
-            id: providerId,
-            name: workerName,
-          },
-          status: 'ACCEPTED'
-        });
-        logger.info(`[SOCKET] Emitted 'booking-confirmed' to customer: ${customerUserId}`);
-      }
+    // Cancel the Redis expiry timer since the booking was accepted
+    await expiryService.cancelExpiry(booking._id.toString());
+
+    // Notify other candidate workers that the booking was taken
+    await notificationService.notifyBookingTaken(
+      candidateUserIds,
+      req.user.id.toString(),
+      booking._id
+    );
+
+    // Fetch the accepting worker's name
+    let workerName = 'Provider';
+    try {
+      const workerUser = await User.findById(req.user.id).select('name');
+      if (workerUser) workerName = workerUser.name;
+    } catch (err) {
+      logger.warn('Could not fetch worker name for booking-confirmed event:', err.message);
     }
+
+    // Notify the customer that their booking has been confirmed
+    const customerUserId = booking.userId._id
+      ? booking.userId._id.toString()
+      : booking.userId.toString();
+
+    await notificationService.notifyBookingConfirmed(customerUserId, {
+      bookingId: booking._id,
+      provider: {
+        id: providerId,
+        name: workerName,
+      },
+      status: 'ACCEPTED',
+    });
+
     return ApiResponse.ok(res, { booking, type: 'INSTANT' }, 'Instant booking accepted successfully.');
   }
 
-  // Handle scheduled response
-  ApiResponse.ok(res, { booking: result.booking }, 'Booking accepted successfully.');
+  // Handle scheduled booking acceptance
+  const { booking } = result;
+
+  // Cancel the Redis expiry timer
+  await expiryService.cancelExpiry(booking._id.toString());
+
+  // Notify the customer that their scheduled booking was accepted
+  const customerUserId = booking.userId._id
+    ? booking.userId._id.toString()
+    : booking.userId.toString();
+
+  await notificationService.notifyScheduledBookingAccepted(customerUserId, {
+    bookingId: booking._id,
+    status: 'ACCEPTED',
+  });
+
+  ApiResponse.ok(res, { booking }, 'Booking accepted successfully.');
 });
 
 /**
@@ -193,6 +209,20 @@ const acceptBooking = asyncHandler(async (req, res) => {
 const rejectBooking = asyncHandler(async (req, res) => {
   const providerId = await _getProviderId(req.user.id);
   const booking = await bookingService.rejectBooking(providerId, req.params.id);
+
+  // Cancel the Redis expiry timer
+  await expiryService.cancelExpiry(booking._id.toString());
+
+  // Notify the customer that their booking was rejected
+  const customerUserId = booking.userId._id
+    ? booking.userId._id.toString()
+    : booking.userId.toString();
+
+  await notificationService.notifyScheduledBookingRejected(customerUserId, {
+    bookingId: booking._id,
+    status: 'REJECTED',
+  });
+
   ApiResponse.ok(res, { booking }, 'Booking rejected.');
 });
 
@@ -202,6 +232,17 @@ const rejectBooking = asyncHandler(async (req, res) => {
 const completeBooking = asyncHandler(async (req, res) => {
   const providerId = await _getProviderId(req.user.id);
   const booking = await bookingService.completeBooking(providerId, req.params.id);
+
+  // Notify the customer that their booking is completed
+  const customerUserId = booking.userId._id
+    ? booking.userId._id.toString()
+    : booking.userId.toString();
+
+  await notificationService.notifyBookingCompleted(customerUserId, {
+    bookingId: booking._id,
+    status: 'COMPLETED',
+  });
+
   ApiResponse.ok(res, { booking }, 'Booking completed successfully. Great job!');
 });
 
