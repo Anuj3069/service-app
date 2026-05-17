@@ -64,6 +64,10 @@ const startServer = async () => {
     const socketStore = new SocketStore(redisClient);
     app.set('socketStore', socketStore);
 
+    // Throttle map: workerId -> lastUpdateTimestamp
+    const locationThrottles = new Map();
+    const THROTTLE_MS = 5000; // 5-second minimum between updates
+
     // Handle Socket Connections & User Mapping (via Redis)
     io.on('connection', (socket) => {
       logger.info(`⚡ Socket connected: ${socket.id}`);
@@ -84,7 +88,68 @@ const startServer = async () => {
         logger.info(`👤 User registered to socket (Redis): ${userId} -> ${socket.id}`);
       });
 
+      // ── LIVE TRACKING: Worker sends location updates ──────
+      socket.on('location-update', async (data) => {
+        try {
+          const { bookingId, coordinates } = data;
+          if (!bookingId || !coordinates || coordinates.length !== 2) return;
+
+          // Throttle: max one update per 5 seconds per socket
+          const now = Date.now();
+          const lastUpdate = locationThrottles.get(socket.id) || 0;
+          if (now - lastUpdate < THROTTLE_MS) return; // Silently ignore
+          locationThrottles.set(socket.id, now);
+
+          const Booking = require('./src/modules/booking/booking.model');
+
+          // Find the booking and validate it's in ACCEPTED status
+          const booking = await Booking.findById(bookingId).select('userId status');
+          if (!booking || booking.status !== 'accepted') return;
+
+          // Persist last known location to DB (for REST fallback)
+          await Booking.findByIdAndUpdate(bookingId, {
+            workerLocation: {
+              type: 'Point',
+              coordinates,
+              updatedAt: new Date(),
+            },
+          });
+
+          // Relay to the customer in real-time
+          const customerSocketId = await socketStore.get(booking.userId.toString());
+          if (customerSocketId) {
+            io.to(customerSocketId).emit('worker-location', {
+              bookingId,
+              coordinates,
+              timestamp: now,
+            });
+          }
+        } catch (err) {
+          logger.error('location-update error:', err.message);
+        }
+      });
+
+      // ── LIVE TRACKING: Worker signals they're en route ────
+      socket.on('tracking-start', async (data) => {
+        try {
+          const { bookingId } = data;
+          if (!bookingId) return;
+
+          const Booking = require('./src/modules/booking/booking.model');
+          const booking = await Booking.findById(bookingId).select('userId status');
+          if (!booking || booking.status !== 'accepted') return;
+
+          const customerSocketId = await socketStore.get(booking.userId.toString());
+          if (customerSocketId) {
+            io.to(customerSocketId).emit('tracking-started', { bookingId });
+          }
+        } catch (err) {
+          logger.error('tracking-start error:', err.message);
+        }
+      });
+
       socket.on('disconnect', async () => {
+        locationThrottles.delete(socket.id); // Clean up throttle
         // Find and remove user mapping on disconnect
         const userId = await socketStore.findBySocketId(socket.id);
         if (userId) {

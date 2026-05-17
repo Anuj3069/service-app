@@ -45,6 +45,25 @@ class ProviderService {
     }
     return provider;
   }
+
+  /**
+   * Update worker's current GPS location
+   */
+  async updateLocation(userId, { coordinates, address }) {
+    const provider = await providerRepository.updateByUserId(userId, {
+      location: {
+        type: 'Point',
+        coordinates, // [longitude, latitude]
+        address: address || undefined,
+      },
+    });
+
+    if (!provider) {
+      throw AppError.notFound('Provider profile not found.');
+    }
+
+    return provider;
+  }
 }
 
 module.exports = new ProviderService();

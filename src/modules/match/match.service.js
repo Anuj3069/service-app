@@ -19,14 +19,16 @@ const bookingRepository = require('../booking/booking.repository');
 const { BOOKING_STATUS } = require('../../shared/utils/constants');
 const logger = require('../../config/logger');
 
+const geoService = require('../../shared/utils/geo.service');
+
 class MatchService {
   /**
    * Find the best available provider for a service request
    *
-   * @param {object} matchRequest - { serviceId, date, slot }
+   * @param {object} matchRequest - { serviceId, date, slot, location }
    * @returns {object} { provider, price, estimatedDuration }
    */
-  async findMatch({ serviceId, date, slot }) {
+  async findMatch({ serviceId, date, slot, location }) {
     // 1. Get service details and required skills
     const service = await Service.findById(serviceId);
     if (!service) {
@@ -39,8 +41,17 @@ class MatchService {
 
     logger.info(`🔍 Matching for service: ${service.name}, skills: [${service.requiredSkills}]`);
 
-    // 2. Find providers with matching skills who are verified + online
-    const providers = await providerRepository.findAvailableBySkills(service.requiredSkills);
+    // 2. Find providers — use geo search if customer location provided
+    let providers;
+    if (location && location.coordinates) {
+      providers = await providerRepository.findNearbyBySkills(
+        service.requiredSkills,
+        location.coordinates,
+        service.searchRadiusKm
+      );
+    } else {
+      providers = await providerRepository.findAvailableBySkills(service.requiredSkills);
+    }
 
     if (providers.length === 0) {
       throw AppError.notFound('No providers available for this service at the moment.');
@@ -93,11 +104,24 @@ class MatchService {
 
     logger.info(`✅ ${freeProviders.length} providers free after booking check`);
 
-    // 6. Select the best provider (already sorted by rating desc, totalJobs desc)
+    // 6. Select the best provider (already sorted by rating desc, totalJobs desc or distance)
     const bestProvider = freeProviders[0];
 
-    // 7. Calculate price (base price from service)
-    const price = service.basePrice;
+    // 7. Calculate price with distance
+    let distanceInfo = null;
+    let totalPrice = service.basePrice;
+
+    if (location && location.coordinates && bestProvider.location?.coordinates) {
+      distanceInfo = await geoService.getDistanceAndETA(
+        location.coordinates,
+        bestProvider.location.coordinates
+      );
+
+      if (distanceInfo && service.pricePerKm > 0) {
+        const distanceCharge = geoService.calculateDistancePrice(distanceInfo.distanceKm, service.pricePerKm);
+        totalPrice = service.basePrice + distanceCharge;
+      }
+    }
 
     return {
       provider: {
@@ -111,7 +135,10 @@ class MatchService {
         id: service._id,
         name: service.name,
       },
-      price,
+      price: totalPrice,
+      basePrice: service.basePrice,
+      distanceCharge: distanceInfo ? geoService.calculateDistancePrice(distanceInfo.distanceKm, service.pricePerKm) : 0,
+      distance: distanceInfo,
       estimatedDuration: service.duration,
       date,
       slot,

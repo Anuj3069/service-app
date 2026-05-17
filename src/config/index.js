@@ -39,6 +39,9 @@ const config = {
 
   // Logging
   logLevel: process.env.LOG_LEVEL || 'info',
+
+  // Third Party APIs
+  googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || null,
 };
 
 // ── Validation ──────────────────────────────────────────────

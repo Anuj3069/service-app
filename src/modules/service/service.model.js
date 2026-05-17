@@ -76,6 +76,17 @@ const serviceSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     }],
+    searchRadiusKm: {
+      type: Number,
+      default: 10,       // Default 10 km if not set
+      min: [1, 'Minimum search radius is 1 km'],
+      max: [50, 'Maximum search radius is 50 km'],
+    },
+    pricePerKm: {
+      type: Number,
+      default: 0,        // 0 means no distance charge
+      min: [0, 'Price per km cannot be negative'],
+    },
     isActive: {
       type: Boolean,
       default: true,

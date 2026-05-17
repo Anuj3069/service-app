@@ -9,8 +9,8 @@
 const { Router } = require('express');
 const { authenticate, authorize } = require('../../shared/middleware/auth.middleware');
 const validate = require('../../shared/middleware/validate.middleware');
-const { createProfileSchema, updateProfileSchema } = require('./provider.validation');
-const { createProfile, getProfile, updateProfile } = require('./provider.controller');
+const { createProfileSchema, updateProfileSchema, updateLocationSchema } = require('./provider.validation');
+const { createProfile, getProfile, updateProfile, updateLocation } = require('./provider.controller');
 const { ROLES } = require('../../shared/utils/constants');
 
 const router = Router();
@@ -21,5 +21,6 @@ router.use(authenticate, authorize(ROLES.WORKER));
 router.post('/', validate(createProfileSchema), createProfile);
 router.get('/', getProfile);
 router.put('/', validate(updateProfileSchema), updateProfile);
+router.put('/location', validate(updateLocationSchema), updateLocation);
 
 module.exports = router;

@@ -33,4 +33,13 @@ const updateProfile = asyncHandler(async (req, res) => {
   ApiResponse.ok(res, { provider }, 'Provider profile updated successfully.');
 });
 
-module.exports = { createProfile, getProfile, updateProfile };
+/**
+ * PUT /api/v1/worker/location
+ * Update worker's current GPS location
+ */
+const updateLocation = asyncHandler(async (req, res) => {
+  const provider = await providerService.updateLocation(req.user.id, req.body);
+  ApiResponse.ok(res, { provider }, 'Location updated successfully.');
+});
+
+module.exports = { createProfile, getProfile, updateProfile, updateLocation };

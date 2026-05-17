@@ -106,6 +106,15 @@ const bookingSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    workerLocation: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point',
+      },
+      coordinates: [Number], // [longitude, latitude]
+      updatedAt: Date,
+    },
   },
   {
     timestamps: true,

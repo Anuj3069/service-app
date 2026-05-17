@@ -21,6 +21,15 @@ const findMatchSchema = {
         'string.pattern.base': 'Slot must be in format HH:MM-HH:MM (e.g., 09:00-10:00)',
         'any.required': 'Time slot is required',
       }),
+    location: Joi.object({
+      coordinates: Joi.array()
+        .ordered(
+          Joi.number().min(-180).max(180),
+          Joi.number().min(-90).max(90)
+        )
+        .length(2)
+        .required(),
+    }).optional(),
   }),
 };
 

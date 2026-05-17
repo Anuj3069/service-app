@@ -77,6 +77,41 @@ class ProviderRepository {
   }
 
   /**
+   * Find nearby providers with matching skills within a radius
+   * Uses MongoDB 2dsphere index on provider.location for efficient geo queries
+   *
+   * Results are automatically sorted by distance (nearest first) thanks to $near
+   */
+  async findNearbyBySkills(skills, coordinates, radiusKm = 10) {
+    const radiusMeters = radiusKm * 1000;
+    const cacheKey = `cache:providers:nearby:${coordinates.join(',')}:${radiusKm}:${skills.sort().join(',')}`;
+    const cached = await cache.get(cacheKey);
+    if (cached) return cached;
+
+    const providers = await Provider.find({
+      skills: { $in: skills },
+      isVerified: true,
+      isAvailable: true,
+      'location.coordinates': { $ne: [0, 0] }, // Skip providers without location
+      location: {
+        $near: {
+          $geometry: {
+            type: 'Point',
+            coordinates, // [longitude, latitude]
+          },
+          $maxDistance: radiusMeters,
+        },
+      },
+    })
+      .populate('userId', 'name email phone')
+      .limit(20);
+
+    // Very short TTL — locations change frequently
+    await cache.set(cacheKey, providers, 15);
+    return providers;
+  }
+
+  /**
    * Check if a provider profile exists for a user
    */
   async existsByUserId(userId) {

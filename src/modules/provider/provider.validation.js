@@ -62,4 +62,20 @@ const updateProfileSchema = {
   }),
 };
 
-module.exports = { createProfileSchema, updateProfileSchema };
+const updateLocationSchema = {
+  body: Joi.object({
+    coordinates: Joi.array()
+      .ordered(
+        Joi.number().min(-180).max(180).required(), // longitude
+        Joi.number().min(-90).max(90).required()    // latitude
+      )
+      .length(2)
+      .required()
+      .messages({
+        'array.length': 'Coordinates must be [longitude, latitude]',
+      }),
+    address: Joi.string().trim().optional(),
+  }),
+};
+
+module.exports = { createProfileSchema, updateProfileSchema, updateLocationSchema };

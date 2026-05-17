@@ -77,7 +77,7 @@ class BookingService {
   /**
    * Create a new instant booking (broadcast to candidates)
    */
-  async createInstantBooking(userId, { serviceId }) {
+  async createInstantBooking(userId, { serviceId, location }) {
     // 1. Validate service exists
     const service = await Service.findById(serviceId);
     if (!service || !service.isActive) {
@@ -86,8 +86,16 @@ class BookingService {
 
     // 2. Find top 3–5 providers
     // TODO: When Socket.IO is implemented, we should also filter by `isOnline: true`
-    // For now, we rely on isAvailable and required skills.
-    const availableProviders = await providerRepository.findAvailableBySkills(service.requiredSkills);
+    let availableProviders;
+    if (location && location.coordinates) {
+      availableProviders = await providerRepository.findNearbyBySkills(
+        service.requiredSkills,
+        location.coordinates,
+        service.searchRadiusKm
+      );
+    } else {
+      availableProviders = await providerRepository.findAvailableBySkills(service.requiredSkills);
+    }
 
     if (availableProviders.length === 0) {
       throw AppError.notFound('No providers are currently available for this service. Please try again later.');
@@ -98,6 +106,22 @@ class BookingService {
     const candidateProviders = topCandidates.map((p) => p._id);
     const candidateUserIds = topCandidates.map((p) => p.userId._id.toString());
 
+    // Calculate price with distance if applicable
+    let price = service.basePrice;
+    if (location && service.pricePerKm > 0 && availableProviders.length > 0) {
+      const nearestProvider = availableProviders[0];
+      if (nearestProvider.location?.coordinates) {
+        const geoService = require('../../shared/utils/geo.service');
+        const distanceInfo = await geoService.getDistanceAndETA(
+          location.coordinates,
+          nearestProvider.location.coordinates
+        );
+        if (distanceInfo) {
+          price = service.basePrice + geoService.calculateDistancePrice(distanceInfo.distanceKm, service.pricePerKm);
+        }
+      }
+    }
+
     // 3. Create booking
     const requestedAt = new Date();
     const expiresAt = new Date(requestedAt.getTime() + 60000); // 60 seconds from now
@@ -107,7 +131,7 @@ class BookingService {
       serviceId,
       candidateProviders,
       type: 'INSTANT',
-      price: service.basePrice,
+      price,
       status: BOOKING_STATUS.REQUESTED,
       requestedAt,
       expiresAt,

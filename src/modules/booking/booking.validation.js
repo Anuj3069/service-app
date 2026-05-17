@@ -35,6 +35,15 @@ const createInstantBookingSchema = {
   body: Joi.object({
     serviceId: objectId.required()
       .messages({ 'any.required': 'Service ID is required' }),
+    location: Joi.object({
+      coordinates: Joi.array()
+        .ordered(
+          Joi.number().min(-180).max(180),
+          Joi.number().min(-90).max(90)
+        )
+        .length(2)
+        .required(),
+    }).optional(),
   }),
 };
 
