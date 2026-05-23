@@ -105,6 +105,43 @@ class AuthService {
 
     return { accessToken, refreshToken };
   }
+
+  /**
+   * Refresh the access token
+   * @param {string} token - The refresh token
+   * @returns {object} { user, tokens }
+   */
+  async refreshToken(token) {
+    if (!token) {
+      throw AppError.unauthorized('Refresh token is missing.');
+    }
+
+    try {
+      // 1. Verify token
+      const decoded = jwt.verify(token, config.jwt.refreshSecret);
+
+      // 2. Fetch user to ensure they still exist and are active
+      const user = await authRepository.findById(decoded.id);
+      if (!user || !user.isActive) {
+        throw AppError.unauthorized('User not found or deactivated.');
+      }
+
+      // 3. Generate new tokens
+      const tokens = this.generateTokens(user);
+
+      return {
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        },
+        tokens,
+      };
+    } catch (error) {
+      throw AppError.unauthorized('Invalid or expired refresh token.');
+    }
+  }
 }
 
 module.exports = new AuthService();

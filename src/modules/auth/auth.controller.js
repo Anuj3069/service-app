@@ -54,4 +54,20 @@ const logout = asyncHandler(async (req, res) => {
   ApiResponse.ok(res, null, 'Logged out successfully.');
 });
 
-module.exports = { register, login, logout };
+/**
+ * POST /api/v1/auth/refresh-token
+ * Refresh access token using refresh token
+ */
+const refreshToken = asyncHandler(async (req, res) => {
+  const { refreshToken } = req.body;
+  
+  if (!refreshToken) {
+    return ApiResponse.error(res, 'Refresh token is required', 400);
+  }
+
+  const result = await authService.refreshToken(refreshToken);
+
+  ApiResponse.ok(res, result, 'Token refreshed successfully.');
+});
+
+module.exports = { register, login, logout, refreshToken };
