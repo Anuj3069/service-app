@@ -20,6 +20,7 @@ const providerRoutes = require('./modules/provider/provider.routes');
 const matchRoutes = require('./modules/match/match.routes');
 const bookingRoutes = require('./modules/booking/booking.routes');
 const reviewRoutes = require('./modules/review/review.routes');
+const nearbyWorkersRoutes = require('./modules/provider/nearby-workers.routes');
 
 const app = express();
 
@@ -64,6 +65,7 @@ app.use(`${API_PREFIX}/user/match`, matchRoutes);
 app.use(`${API_PREFIX}`, bookingRoutes);
 
 app.use(`${API_PREFIX}/user/reviews`, reviewRoutes);
+app.use(`${API_PREFIX}/user/nearby-workers`, nearbyWorkersRoutes);
 
 // ── 404 Handler ─────────────────────────────────────────────
 app.use(notFoundHandler);
