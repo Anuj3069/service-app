@@ -285,9 +285,18 @@ describe('⚡ Instant Booking Flow — End-to-End', () => {
 
   // ─── STEP 11: Provider Completes the Job ──────────────
   it('Step 11: Provider should complete the instant booking', async () => {
+    // Fetch OTP as the customer
+    const otpRes = await request(app)
+      .get(`/api/v1/user/bookings/${instantBookingId}/otp`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .expect(200);
+
+    const { otp } = otpRes.body.data;
+
     const res = await request(app)
       .put(`/api/v1/worker/bookings/${instantBookingId}/complete`)
       .set('Authorization', `Bearer ${worker1Token}`)
+      .send({ otp })
       .expect(200);
 
     expect(res.body.data.booking.status).toBe('completed');

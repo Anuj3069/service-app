@@ -79,6 +79,15 @@ const getBookingById = asyncHandler(async (req, res) => {
   ApiResponse.ok(res, { booking }, 'Booking retrieved successfully.');
 });
 
+/**
+ * GET /api/v1/user/bookings/:id/otp
+ * Customer retrieves the completion OTP for their accepted booking
+ */
+const getCompletionOtp = asyncHandler(async (req, res) => {
+  const result = await bookingService.getCompletionOtp(req.user.id, req.params.id);
+  ApiResponse.ok(res, result, 'OTP retrieved successfully.');
+});
+
 // ─────────────────────────────────────────────────────────────
 //  WORKER ENDPOINTS
 // ─────────────────────────────────────────────────────────────
@@ -165,7 +174,25 @@ const rejectBooking = asyncHandler(async (req, res) => {
  */
 const completeBooking = asyncHandler(async (req, res) => {
   const providerId = await _getProviderId(req.user.id);
-  const booking = await bookingService.completeBooking(providerId, req.params.id);
+  const { otp } = req.body;
+  const booking = await bookingService.completeBooking(providerId, req.params.id, otp);
+
+  // Notify customer via socket that their booking is completed
+  const io = req.app.get('io');
+  const socketStore = req.app.get('socketStore');
+  if (io && socketStore && booking.userId) {
+    const customerId = booking.userId._id
+      ? booking.userId._id.toString()
+      : booking.userId.toString();
+    const customerSocketId = await socketStore.get(customerId);
+    if (customerSocketId) {
+      io.to(customerSocketId).emit('booking-completed', {
+        bookingId: booking._id,
+        completedAt: booking.completedAt,
+      });
+    }
+  }
+
   ApiResponse.ok(res, { booking }, 'Booking completed successfully. Great job!');
 });
 
@@ -174,6 +201,7 @@ module.exports = {
   createInstantBooking,
   getUserBookings,
   getBookingById,
+  getCompletionOtp,
   getWorkerBookings,
   acceptBooking,
   rejectBooking,

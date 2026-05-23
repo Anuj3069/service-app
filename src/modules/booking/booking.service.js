@@ -19,6 +19,14 @@ const providerRepository = require('../provider/provider.repository');
 const { Service } = require('../service/service.model');
 
 class BookingService {
+  /**
+   * Generate a random 4-digit OTP string
+   * @private
+   */
+  _generateOtp() {
+    return String(Math.floor(1000 + Math.random() * 9000));
+  }
+
   // ─────────────────────────────────────────────────────────
   //  CUSTOMER APIs
   // ─────────────────────────────────────────────────────────
@@ -27,7 +35,7 @@ class BookingService {
    * Create a new booking
    * CRITICAL: Rechecks provider availability before creating
    */
-  async createBooking(userId, { providerId, serviceId, date, slot, price }) {
+  async createBooking(userId, { providerId, serviceId, date, slot, price, customerLocation }) {
     // 1. Validate service exists
     const service = await Service.findById(serviceId);
     if (!service || !service.isActive) {
@@ -66,6 +74,11 @@ class BookingService {
       price,
       status: BOOKING_STATUS.PENDING,
       expiresAt,
+      customerLocation: customerLocation ? {
+        type: 'Point',
+        coordinates: customerLocation.coordinates,
+        address: customerLocation.address || '',
+      } : undefined
     });
 
     logger.info(`📝 Booking created: ${booking._id} | User: ${userId} | Provider: ${providerId} | Expires: ${expiresAt}`);
@@ -77,7 +90,7 @@ class BookingService {
   /**
    * Create a new instant booking (broadcast to candidates)
    */
-  async createInstantBooking(userId, { serviceId, location }) {
+  async createInstantBooking(userId, { serviceId, location, customerLocation }) {
     // 1. Validate service exists
     const service = await Service.findById(serviceId);
     if (!service || !service.isActive) {
@@ -87,10 +100,11 @@ class BookingService {
     // 2. Find top 3–5 providers
     // TODO: When Socket.IO is implemented, we should also filter by `isOnline: true`
     let availableProviders;
-    if (location && location.coordinates) {
+    const activeLocation = customerLocation || location;
+    if (activeLocation && activeLocation.coordinates) {
       availableProviders = await providerRepository.findNearbyBySkills(
         service.requiredSkills,
-        location.coordinates,
+        activeLocation.coordinates,
         service.searchRadiusKm
       );
     } else {
@@ -108,12 +122,12 @@ class BookingService {
 
     // Calculate price with distance if applicable
     let price = service.basePrice;
-    if (location && service.pricePerKm > 0 && availableProviders.length > 0) {
+    if (activeLocation && service.pricePerKm > 0 && availableProviders.length > 0) {
       const nearestProvider = availableProviders[0];
       if (nearestProvider.location?.coordinates) {
         const geoService = require('../../shared/utils/geo.service');
         const distanceInfo = await geoService.getDistanceAndETA(
-          location.coordinates,
+          activeLocation.coordinates,
           nearestProvider.location.coordinates
         );
         if (distanceInfo) {
@@ -135,6 +149,11 @@ class BookingService {
       status: BOOKING_STATUS.REQUESTED,
       requestedAt,
       expiresAt,
+      customerLocation: activeLocation ? {
+        type: 'Point',
+        coordinates: activeLocation.coordinates,
+        address: activeLocation.address || '',
+      } : undefined
     });
 
     logger.info(`⚡ Instant Booking created: ${booking._id} | User: ${userId} | Candidates: ${candidateProviders.length}`);
@@ -258,6 +277,7 @@ class BookingService {
       }
 
       // Perform atomic update
+      const otp = this._generateOtp();
       const BookingModel = require('./booking.model'); // Require here to avoid circular dep if any, or just use it
       const updated = await BookingModel.findOneAndUpdate(
         { _id: bookingId, status: BOOKING_STATUS.REQUESTED },
@@ -265,7 +285,8 @@ class BookingService {
           status: BOOKING_STATUS.ACCEPTED,
           providerId,
           acceptedAt: new Date(),
-          expiresAt: null
+          expiresAt: null,
+          completionOtp: otp,
         },
         { new: true }
       ).populate('userId', 'name email phone')
@@ -275,7 +296,7 @@ class BookingService {
         throw AppError.gone('This booking has already been accepted by another provider or has expired.');
       }
 
-      logger.info(`✅ Instant Booking accepted: ${bookingId} by provider: ${providerId}`);
+      logger.info(`✅ Instant Booking accepted: ${bookingId} by provider: ${providerId} | OTP: ${otp}`);
       
       // Return populated candidate userIds for notifications
       // booking.candidateProviders is already populated by findById
@@ -305,14 +326,16 @@ class BookingService {
     // 4. Validate status transition
     this._validateTransition(booking.status, BOOKING_STATUS.ACCEPTED);
 
-    // 5. Update booking
+    // 5. Update booking — generate OTP for completion verification
+    const otp = this._generateOtp();
     const updated = await bookingRepository.updateById(bookingId, {
       status: BOOKING_STATUS.ACCEPTED,
       acceptedAt: new Date(),
       expiresAt: null, // Clear expiry after acceptance
+      completionOtp: otp,
     });
 
-    logger.info(`✅ Booking accepted: ${bookingId} by provider: ${providerId}`);
+    logger.info(`✅ Booking accepted: ${bookingId} by provider: ${providerId} | OTP: ${otp}`);
 
     return { booking: updated, type: 'SCHEDULED' };
   }
@@ -345,31 +368,62 @@ class BookingService {
   }
 
   /**
-   * Complete a booking
+   * Get the completion OTP for a booking (customer-only)
+   */
+  async getCompletionOtp(userId, bookingId) {
+    const BookingModel = require('./booking.model');
+    const booking = await BookingModel.findById(bookingId).select('+completionOtp');
+    if (!booking) {
+      throw AppError.notFound('Booking not found.');
+    }
+    if (booking.userId.toString() !== userId.toString()) {
+      throw AppError.forbidden('You do not have access to this booking.');
+    }
+    if (booking.status !== BOOKING_STATUS.ACCEPTED) {
+      throw AppError.badRequest('OTP is only available for accepted bookings.');
+    }
+    if (!booking.completionOtp) {
+      throw AppError.notFound('OTP not yet generated for this booking.');
+    }
+    return { otp: booking.completionOtp, bookingId };
+  }
+
+  /**
+   * Complete a booking — requires OTP verification
    * Only allowed if booking is in ACCEPTED status
    */
-  async completeBooking(providerId, bookingId) {
-    const booking = await bookingRepository.findById(bookingId);
+  async completeBooking(providerId, bookingId, otp) {
+    const BookingModel = require('./booking.model');
+    const booking = await BookingModel.findById(bookingId).select('+completionOtp');
 
     if (!booking) {
       throw AppError.notFound('Booking not found.');
     }
 
-    if (booking.providerId._id.toString() !== providerId.toString()) {
+    if (booking.providerId.toString() !== providerId.toString()) {
       throw AppError.forbidden('This booking is not assigned to you.');
     }
 
     this._validateTransition(booking.status, BOOKING_STATUS.COMPLETED);
 
+    // ── OTP Verification ──────────────────────────────────────
+    if (!booking.completionOtp) {
+      throw AppError.badRequest('No OTP was generated for this booking. Please contact support.');
+    }
+    if (!otp || otp.trim() !== booking.completionOtp) {
+      throw AppError.badRequest('Invalid OTP. Please ask the customer for the correct code.');
+    }
+
     const updated = await bookingRepository.updateById(bookingId, {
       status: BOOKING_STATUS.COMPLETED,
       completedAt: new Date(),
+      otpVerifiedAt: new Date(),
     });
 
     // Increment provider's total jobs
     await providerRepository.incrementTotalJobs(providerId);
 
-    logger.info(`🎉 Booking completed: ${bookingId} by provider: ${providerId}`);
+    logger.info(`🎉 Booking completed: ${bookingId} by provider: ${providerId} (OTP verified)`);
 
     return updated;
   }

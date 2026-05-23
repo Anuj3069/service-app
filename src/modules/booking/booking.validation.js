@@ -28,6 +28,16 @@ const createBookingSchema = {
         'number.min': 'Price cannot be negative',
         'any.required': 'Price is required',
       }),
+    customerLocation: Joi.object({
+      coordinates: Joi.array()
+        .ordered(
+          Joi.number().min(-180).max(180),
+          Joi.number().min(-90).max(90)
+        )
+        .length(2)
+        .required(),
+      address: Joi.string().trim().optional(),
+    }).optional(),
   }),
 };
 
@@ -43,6 +53,17 @@ const createInstantBookingSchema = {
         )
         .length(2)
         .required(),
+      address: Joi.string().trim().optional(),
+    }).optional(),
+    customerLocation: Joi.object({
+      coordinates: Joi.array()
+        .ordered(
+          Joi.number().min(-180).max(180),
+          Joi.number().min(-90).max(90)
+        )
+        .length(2)
+        .required(),
+      address: Joi.string().trim().optional(),
     }).optional(),
   }),
 };
@@ -59,6 +80,20 @@ const bookingActionSchema = {
   }),
 };
 
+const completeBookingSchema = {
+  params: Joi.object({
+    id: objectId.required(),
+  }),
+  body: Joi.object({
+    otp: Joi.string().length(4).pattern(/^\d{4}$/).required()
+      .messages({
+        'string.length': 'OTP must be exactly 4 digits',
+        'string.pattern.base': 'OTP must contain only digits',
+        'any.required': 'OTP is required to complete the booking',
+      }),
+  }),
+};
+
 const listBookingsSchema = {
   query: Joi.object({
     status: Joi.string()
@@ -72,5 +107,6 @@ module.exports = {
   createInstantBookingSchema,
   getBookingByIdSchema,
   bookingActionSchema,
+  completeBookingSchema,
   listBookingsSchema,
 };

@@ -115,6 +115,27 @@ const bookingSchema = new mongoose.Schema(
       coordinates: [Number], // [longitude, latitude]
       updatedAt: Date,
     },
+
+    customerLocation: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point',
+      },
+      coordinates: [Number], // [longitude, latitude]
+      address: String,
+    },
+
+    // ── OTP for job completion verification ─────────────────
+    completionOtp: {
+      type: String,
+      length: 4,
+      select: false, // never returned in normal queries
+    },
+    otpVerifiedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

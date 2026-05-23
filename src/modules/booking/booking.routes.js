@@ -22,6 +22,7 @@ const {
   createInstantBookingSchema,
   getBookingByIdSchema,
   bookingActionSchema,
+  completeBookingSchema,
   listBookingsSchema,
 } = require('./booking.validation');
 const {
@@ -33,6 +34,7 @@ const {
   acceptBooking,
   rejectBooking,
   completeBooking,
+  getCompletionOtp,
 } = require('./booking.controller');
 
 const router = Router();
@@ -70,6 +72,15 @@ router.get(
   getBookingById
 );
 
+// Customer fetches OTP for their accepted booking
+router.get(
+  '/user/bookings/:id/otp',
+  authenticate,
+  authorize(ROLES.CUSTOMER),
+  validate(getBookingByIdSchema),
+  getCompletionOtp
+);
+
 // ── WORKER BOOKING ROUTES ───────────────────────────────────
 router.get(
   '/worker/bookings',
@@ -99,7 +110,7 @@ router.put(
   '/worker/bookings/:id/complete',
   authenticate,
   authorize(ROLES.WORKER),
-  validate(bookingActionSchema),
+  validate(completeBookingSchema),
   completeBooking
 );
 

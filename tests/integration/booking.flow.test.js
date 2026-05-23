@@ -228,9 +228,18 @@ describe('🔄 Full Booking Flow — End-to-End', () => {
 
   // ─── STEP 12: Worker Completes Booking ────────────────
   it('Step 12: Worker should complete the booking', async () => {
+    // Fetch OTP as the customer
+    const otpRes = await request(app)
+      .get(`/api/v1/user/bookings/${bookingId}/otp`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .expect(200);
+
+    const { otp } = otpRes.body.data;
+
     const res = await request(app)
       .put(`/api/v1/worker/bookings/${bookingId}/complete`)
       .set('Authorization', `Bearer ${workerToken}`)
+      .send({ otp })
       .expect(200);
 
     expect(res.body.data.booking.status).toBe('completed');

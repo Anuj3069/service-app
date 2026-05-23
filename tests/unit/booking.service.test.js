@@ -148,7 +148,9 @@ describe('BookingService', () => {
 
     it('ACCEPTED → COMPLETED (valid)', async () => {
       await bookingService.acceptBooking(provider._id, bookingId);
-      const result = await bookingService.completeBooking(provider._id, bookingId);
+      const bookingFromDb = await Booking.findById(bookingId).select('+completionOtp');
+      const otp = bookingFromDb.completionOtp;
+      const result = await bookingService.completeBooking(provider._id, bookingId, otp);
       expect(result.status).toBe('completed');
       expect(result.completedAt).toBeDefined();
     });
@@ -161,7 +163,9 @@ describe('BookingService', () => {
 
     it('COMPLETED → ACCEPTED (invalid)', async () => {
       await bookingService.acceptBooking(provider._id, bookingId);
-      await bookingService.completeBooking(provider._id, bookingId);
+      const bookingFromDb = await Booking.findById(bookingId).select('+completionOtp');
+      const otp = bookingFromDb.completionOtp;
+      await bookingService.completeBooking(provider._id, bookingId, otp);
 
       await expect(
         bookingService.acceptBooking(provider._id, bookingId)
