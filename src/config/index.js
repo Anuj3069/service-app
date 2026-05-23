@@ -7,6 +7,20 @@
 
 require('dotenv').config();
 
+let redisDb = parseInt(process.env.REDIS_DB, 10) || 0;
+if (process.env.REDIS_URL) {
+  try {
+    const parsed = new URL(process.env.REDIS_URL);
+    const dbStr = parsed.pathname.substring(1);
+    const dbIndex = parseInt(dbStr, 10);
+    if (!isNaN(dbIndex)) {
+      redisDb = dbIndex;
+    }
+  } catch (err) {
+    // Ignore URL parsing errors here; ioredis will handle them
+  }
+}
+
 const config = {
   // Application
   env: process.env.NODE_ENV || 'development',
@@ -31,10 +45,11 @@ const config = {
 
   // Redis
   redis: {
+    url: process.env.REDIS_URL || null,
     host: process.env.REDIS_HOST || '127.0.0.1',
     port: parseInt(process.env.REDIS_PORT, 10) || 6379,
     password: process.env.REDIS_PASSWORD || undefined,
-    db: parseInt(process.env.REDIS_DB, 10) || 0,
+    db: redisDb,
   },
 
   // Logging

@@ -10,7 +10,7 @@
  * 3. A subscriber listens for keyspace expiration events and handles the expiry logic
  */
 
-const { getRedisClient } = require('../../config/redis');
+const { getRedisClient, createRedisClient } = require('../../config/redis');
 const logger = require('../../config/logger');
 
 const EXPIRY_PREFIX = 'booking:expiry:';
@@ -60,13 +60,7 @@ class ExpiryScheduler {
       return;
     }
 
-    const Redis = require('ioredis');
-    const sub = new Redis({
-      host: config.redis.host,
-      port: config.redis.port,
-      password: config.redis.password || undefined,
-      db: config.redis.db,
-    });
+    const sub = createRedisClient();
 
     // Enable keyspace notifications for expired keys
     getRedisClient().config('SET', 'notify-keyspace-events', 'Ex').catch((err) => {
