@@ -42,7 +42,7 @@ class PaymentService {
     // 3️⃣ Prevent duplicate payment creation
     const existingPayment = await Payment.findOne({
       bookingId: booking._id,
-      status: { $in: ['pending', 'PENDING'] },
+      status: { $in: ['pending'] },
     });
 
     if (existingPayment?.paymentSessionId) {
@@ -113,7 +113,7 @@ class PaymentService {
         paymentSessionId: cfOrder.payment_session_id,
         amount: amount,
         currency: 'INR',
-        status: 'PENDING',
+        status: 'pending',
         cfOrderId: cfOrder.cf_order_id || cfOrder.order_id,
       });
 
