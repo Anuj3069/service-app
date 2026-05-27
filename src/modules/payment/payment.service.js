@@ -29,6 +29,7 @@ class PaymentService {
    */
   async createPaymentOrder(booking) {
     // 1️⃣ Generate unique order ID
+
     const orderId = `cf_${booking._id.toString()}_${Date.now()}`;
     const amount = booking.price;
 
@@ -66,7 +67,7 @@ class PaymentService {
           booking.userId.email || 'customer@example.com',
       },
       order_meta: {
-        return_url: `${config.app.baseUrl}/payment-status?order_id={order_id}`,
+        // return_url: `${config.app.baseUrl}/payment-status?order_id={order_id}`,
       },
     };
 
