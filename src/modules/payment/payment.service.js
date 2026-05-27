@@ -18,21 +18,43 @@ Cashfree.XClientId = config.cashfree.clientId;
 Cashfree.XClientSecret = config.cashfree.clientSecret;
 Cashfree.XEnvironment = cfEnv;
 
+const CASHFREE_BASE_URL =
+  config.cashfree.env === 'PROD'
+    ? 'https://api.cashfree.com/pg'
+    : 'https://sandbox.cashfree.com/pg';
+
 class PaymentService {
   /**
    * Create a Cashfree Payment Order for a completed booking
    */
   async createPaymentOrder(booking) {
-    // 1. Generate unique order ID
+    // 1️⃣ Generate unique order ID
     const orderId = `cf_${booking._id.toString()}_${Date.now()}`;
     const amount = booking.price;
 
-    // 2. Prepare customer details
-    const customerPhone = booking.userId.phone || '9999999999';
-    // Ensure phone has at least 10 digits and is valid
-    const cleanPhone = customerPhone.replace(/\D/g, '').slice(-10) || '9999999999';
+    // 2️⃣ Prevent payment for already paid bookings
+    if (booking.paymentStatus === 'PAID') {
+      throw AppError.badRequest('Booking already paid');
+    }
 
-    const requestPayload = {
+    // 3️⃣ Prevent duplicate payment creation
+    const existingPayment = await Payment.findOne({
+      bookingId: booking._id,
+      status: { $in: ['pending', 'PENDING'] },
+    });
+
+    if (existingPayment?.paymentSessionId) {
+      return existingPayment;
+    }
+
+    // 4️⃣ Prepare customer details
+    const customerPhone = booking.userId.phone || '9999999999';
+
+    // Ensure valid 10-digit phone
+    const cleanPhone =
+      customerPhone.replace(/\D/g, '').slice(-10) || '9999999999';
+
+    const paymentOrder = {
       order_amount: amount,
       order_currency: 'INR',
       order_id: orderId,
@@ -40,35 +62,65 @@ class PaymentService {
         customer_id: booking.userId._id.toString(),
         customer_phone: cleanPhone,
         customer_name: booking.userId.name || 'Customer',
-        customer_email: booking.userId.email || 'customer@example.com',
+        customer_email:
+          booking.userId.email || 'customer@example.com',
       },
       order_meta: {
-        return_url: `https://your-domain.com/payment-status?order_id={order_id}`,
+        return_url: `${config.app.baseUrl}/payment-status?order_id={order_id}`,
       },
     };
 
     try {
-      logger.info(`Creating Cashfree Order for booking: ${booking._id} | Amount: ${amount}`);
-      const response = await Cashfree.PGCreateOrder(requestPayload);
+      logger.info(
+        `Creating Cashfree Order for booking: ${booking._id} | Amount: ${amount}`
+      );
+
+      logger.info(
+        `Using Cashfree API URL: ${CASHFREE_BASE_URL}/orders`
+      );
+
+      const response = await axios.post(
+        `${CASHFREE_BASE_URL}/orders`,
+        paymentOrder,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-client-id': config.cashfree.clientId,
+            'x-client-secret': config.cashfree.clientSecret,
+            'x-api-version': '2022-09-01',
+          },
+        }
+      );
 
       const cfOrder = response.data;
 
-      // Create Payment record in DB
+      logger.info(
+        `Cashfree order created successfully: ${cfOrder.order_id}`
+      );
+
+      // 5️⃣ Save payment in DB only if API succeeds
       const payment = await Payment.create({
         bookingId: booking._id,
         userId: booking.userId._id,
-        orderId: orderId,
+        orderId: cfOrder.order_id,
         paymentSessionId: cfOrder.payment_session_id,
         amount: amount,
-        status: 'pending',
-        cfOrderId: cfOrder.cf_order_id,
+        currency: 'INR',
+        status: 'PENDING',
+        cfOrderId: cfOrder.cf_order_id || cfOrder.order_id,
       });
 
       return payment;
     } catch (error) {
-      const errorMsg = error.response?.data?.message || error.message;
-      logger.error(`Cashfree Order Creation failed: ${errorMsg}`);
-      throw AppError.badRequest(`Payment initiation failed: ${errorMsg}`);
+      logger.error(
+        'Cashfree order creation failed:',
+        error.response?.data || error.message
+      );
+
+      throw AppError.badRequest(
+        error.response?.data?.message ||
+        'Payment gateway error'
+      );
     }
   }
 
@@ -157,49 +209,128 @@ class PaymentService {
    * Re‑uses the existing polling logic to fetch order status from Cashfree,
    * update the DB if needed, and return the payment record.
    */
+
   async verifyPayment(bookingId) {
-    // Delegates to the existing checkPaymentStatus which already handles
-    // fetching from Cashfree, updating DB, and returning the payment
     return await this.checkPaymentStatus(bookingId);
   }
 
-    async checkPaymentStatus(bookingId) {
-    const payment = await Payment.findOne({ bookingId }).sort({ createdAt: -1 });
+  async checkPaymentStatus(bookingId) {
+    const payment = await Payment.findOne({ bookingId })
+      .sort({ createdAt: -1 });
+
     if (!payment) {
-      throw AppError.notFound('No payment initiation found for this booking.');
+      throw AppError.notFound(
+        'No payment initiation found for this booking.'
+      );
     }
 
+    // Already paid
     if (payment.status === 'paid') {
       return payment;
     }
 
     try {
-      logger.info(`Fetching order status from Cashfree for orderId: ${payment.orderId}`);
-      const response = await Cashfree.PGFetchOrder(payment.orderId);
-      const cfOrder = response.data;
+      logger.info(
+        `Fetching payment status from Cashfree for orderId: ${payment.orderId}`
+      );
 
-      // Note: In newer Cashfree APIs, we check the order status ('PAID', 'ACTIVE', etc.)
-      if (cfOrder.order_status === 'PAID') {
-        payment.status = 'paid';
-        payment.paidAt = new Date();
-        await payment.save();
+      const response = await axios.get(
+        `${CASHFREE_BASE_URL}/orders/${payment.orderId}/payments`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-client-id': config.cashfree.clientId,
+            'x-client-secret': config.cashfree.clientSecret,
+            'x-api-version': '2022-09-01',
+          },
+        }
+      );
 
-        const bookingService = require('../booking/booking.service');
-        await bookingService.finalizePayment(payment.bookingId);
-        logger.info(`Payment successfully polled and updated to 'paid' for orderId: ${payment.orderId}`);
-      } else if (cfOrder.order_status === 'FAILED' || cfOrder.order_status === 'EXPIRED') {
-        payment.status = 'failed';
-        await payment.save();
+      logger.info(
+        `Cashfree payment response: ${JSON.stringify(response.data)}`
+      );
 
-        await bookingRepository.updateById(payment.bookingId, { paymentStatus: 'failed' });
-        logger.info(`Payment polled and updated to 'failed' for orderId: ${payment.orderId}`);
+      // No payment attempt yet
+      if (!response.data || response.data.length === 0) {
+        return {
+          success: false,
+          payment_status: 'NOT_ATTEMPTED',
+          message: 'No payment attempt found yet',
+        };
       }
 
-      return payment;
+      // Latest payment attempt
+      const latestPayment = response.data[0];
+
+      logger.info(
+        `Latest payment status: ${latestPayment.payment_status}`
+      );
+
+      // SUCCESS
+      if (latestPayment.payment_status === 'SUCCESS') {
+        payment.status = 'paid';
+        payment.paidAt = new Date();
+        payment.cfPaymentId = latestPayment.cf_payment_id;
+
+        await payment.save();
+
+        // Update booking payment status
+        await bookingRepository.updateById(payment.bookingId, {
+          paymentStatus: 'paid',
+        });
+
+        // Finalize booking
+        const bookingService = require('../booking/booking.service');
+
+        await bookingService.finalizePayment(
+          payment.bookingId
+        );
+
+        logger.info(
+          `Payment updated to PAID for orderId: ${payment.orderId}`
+        );
+      }
+
+      // FAILED
+      else if (
+        latestPayment.payment_status === 'FAILED'
+      ) {
+        payment.status = 'failed';
+
+        await payment.save();
+
+        await bookingRepository.updateById(payment.bookingId, {
+          paymentStatus: 'failed',
+        });
+
+        logger.info(
+          `Payment updated to FAILED for orderId: ${payment.orderId}`
+        );
+      }
+
+      // PENDING / USER_DROPPED / NOT_ATTEMPTED
+      else {
+        payment.status =
+          latestPayment.payment_status.toLowerCase();
+
+        await payment.save();
+
+        logger.info(
+          `Payment still pending for orderId: ${payment.orderId}`
+        );
+      }
+
+      return latestPayment;
     } catch (error) {
-      const errorMsg = error.response?.data?.message || error.message;
-      logger.error(`Failed to fetch payment status from Cashfree: ${errorMsg}`);
-      throw AppError.badRequest(`Verification failed: ${errorMsg}`);
+      logger.error(
+        'Fetch payment error:',
+        error.response?.data || error.message
+      );
+
+      throw AppError.badRequest(
+        error.response?.data?.message ||
+        'Failed to fetch payment status'
+      );
     }
   }
 }
