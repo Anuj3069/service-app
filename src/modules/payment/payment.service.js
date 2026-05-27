@@ -246,6 +246,7 @@ class PaymentService {
         `Fetching payment status from Cashfree for orderId: ${payment.orderId}`
       );
 
+      console.log(`Fetching payment status from Cashfree for orderId: ${payment.orderId}`)
       const response = await axios.get(
         `${CASHFREE_BASE_URL}/orders/${payment.orderId}/payments`,
         {
@@ -258,12 +259,14 @@ class PaymentService {
         }
       );
 
+      console.log(`Cashfree payment response: ${JSON.stringify(response.data)}`)
       logger.info(
         `Cashfree payment response: ${JSON.stringify(response.data)}`
       );
 
       // No payment attempt yet
       if (!response.data || response.data.length === 0) {
+        console.log('No payment attempt found yet')
         return {
           success: false,
           payment_status: 'NOT_ATTEMPTED',
@@ -274,12 +277,14 @@ class PaymentService {
       // Latest payment attempt
       const latestPayment = response.data[0];
 
+      console.log(`Latest payment status: ${latestPayment.payment_status}`)
       logger.info(
         `Latest payment status: ${latestPayment.payment_status}`
       );
 
       // SUCCESS
       if (latestPayment.payment_status === 'SUCCESS') {
+        console.log('Payment status is SUCCESS')
         payment.status = 'paid';
         payment.paidAt = new Date();
         payment.cfPaymentId = latestPayment.cf_payment_id;
@@ -307,6 +312,7 @@ class PaymentService {
       else if (
         latestPayment.payment_status === 'FAILED'
       ) {
+        console.log('Payment status is FAILED')
         payment.status = 'failed';
 
         await payment.save();
@@ -314,6 +320,8 @@ class PaymentService {
         await bookingRepository.updateById(payment.bookingId, {
           paymentStatus: 'failed',
         });
+
+        console.log('Payment status updated to FAILED for orderId: ${payment.orderId}')
 
         logger.info(
           `Payment updated to FAILED for orderId: ${payment.orderId}`
@@ -334,6 +342,7 @@ class PaymentService {
 
       return latestPayment;
     } catch (error) {
+      console.log('Fetch payment error:', error.response?.data || error.message)
       logger.error(
         'Fetch payment error:',
         error.response?.data || error.message
