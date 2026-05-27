@@ -13,10 +13,10 @@ const Payment = require('./payment.model');
 const bookingRepository = require('../booking/booking.repository');
 
 // Initialize Cashfree SDK
-const cfEnv = config.cashfree.env === 'PROD' ? Cashfree.Environment.PRODUCTION : Cashfree.Environment.SANDBOX;
-Cashfree.XClientId = config.cashfree.clientId;
-Cashfree.XClientSecret = config.cashfree.clientSecret;
-Cashfree.XEnvironment = cfEnv;
+// const cfEnv = config.cashfree.env === 'PROD' ? Cashfree.Environment.PRODUCTION : Cashfree.Environment.SANDBOX;
+// Cashfree.XClientId = config.cashfree.clientId;
+// Cashfree.XClientSecret = config.cashfree.clientSecret;
+// Cashfree.XEnvironment = cfEnv;
 
 const CASHFREE_BASE_URL =
   config.cashfree.env === 'PROD'
