@@ -11,6 +11,7 @@ const logger = require('../../config/logger');
 const AppError = require('../../shared/utils/api-error');
 const Payment = require('./payment.model');
 const bookingRepository = require('../booking/booking.repository');
+const axios = require('axios');
 
 // Initialize Cashfree SDK
 // const cfEnv = config.cashfree.env === 'PROD' ? Cashfree.Environment.PRODUCTION : Cashfree.Environment.SANDBOX;
