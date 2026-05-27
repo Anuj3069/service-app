@@ -120,6 +120,9 @@ class PaymentService {
 
       return payment;
     } catch (error) {
+      console.log('Cashfree order creation failed:',
+        error.response?.data || error.message)
+
       logger.error(
         'Cashfree order creation failed:',
         error.response?.data || error.message
