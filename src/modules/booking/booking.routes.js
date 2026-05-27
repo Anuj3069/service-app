@@ -35,6 +35,7 @@ const {
   rejectBooking,
   completeBooking,
   getCompletionOtp,
+  payBooking,
 } = require('./booking.controller');
 
 const router = Router();
@@ -79,6 +80,15 @@ router.get(
   authorize(ROLES.CUSTOMER),
   validate(getBookingByIdSchema),
   getCompletionOtp
+);
+
+// Customer initiates payment for a completed booking
+router.post(
+  '/user/bookings/:id/pay',
+  authenticate,
+  authorize(ROLES.CUSTOMER),
+  validate(getBookingByIdSchema),
+  payBooking
 );
 
 // ── WORKER BOOKING ROUTES ───────────────────────────────────

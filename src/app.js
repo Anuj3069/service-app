@@ -22,6 +22,7 @@ const bookingRoutes = require('./modules/booking/booking.routes');
 const reviewRoutes = require('./modules/review/review.routes');
 const nearbyWorkersRoutes = require('./modules/provider/nearby-workers.routes');
 const chatRoutes = require('./modules/chat/chat.routes');
+const paymentRoutes = require('./modules/payment/payment.routes');
 
 const app = express();
 
@@ -33,7 +34,12 @@ app.use(cors({
 }));
 
 // ── Body Parsing ────────────────────────────────────────────
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({
+  limit: '10kb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
 // ── Request Logging ─────────────────────────────────────────
@@ -65,6 +71,7 @@ app.use(`${API_PREFIX}/user/match`, matchRoutes);
 // Booking routes handle both /user/bookings and /worker/bookings
 app.use(`${API_PREFIX}`, bookingRoutes);
 app.use(`${API_PREFIX}`, chatRoutes);
+app.use(`${API_PREFIX}/payments`, paymentRoutes);
 
 app.use(`${API_PREFIX}/user/reviews`, reviewRoutes);
 app.use(`${API_PREFIX}/user/nearby-workers`, nearbyWorkersRoutes);

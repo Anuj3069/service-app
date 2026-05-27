@@ -80,6 +80,15 @@ const getBookingById = asyncHandler(async (req, res) => {
 });
 
 /**
+ * POST /api/v1/user/bookings/:id/pay
+ * Initiate payment for a completed booking
+ */
+const payBooking = asyncHandler(async (req, res) => {
+  const payment = await bookingService.payBooking(req.user.id, req.params.id);
+  ApiResponse.ok(res, { payment }, 'Payment initiated. Use paymentSessionId to complete checkout.');
+});
+
+/**
  * GET /api/v1/user/bookings/:id/otp
  * Customer retrieves the completion OTP for their accepted booking
  */
@@ -202,6 +211,7 @@ module.exports = {
   getUserBookings,
   getBookingById,
   getCompletionOtp,
+  payBooking,
   getWorkerBookings,
   acceptBooking,
   rejectBooking,

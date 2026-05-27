@@ -57,12 +57,21 @@ const config = {
 
   // Third Party APIs
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || null,
+
+  // Cashfree
+  cashfree: {
+    clientId: process.env.CASHFREE_CLIENT_ID || null,
+    clientSecret: process.env.CASHFREE_CLIENT_SECRET || null,
+    env: process.env.CASHFREE_ENV || 'TEST',
+  },
 };
 
 // ── Validation ──────────────────────────────────────────────
 const requiredVars = [
   { key: 'jwt.secret', value: config.jwt.secret },
   { key: 'jwt.refreshSecret', value: config.jwt.refreshSecret },
+  { key: 'cashfree.clientId', value: config.cashfree.clientId },
+  { key: 'cashfree.clientSecret', value: config.cashfree.clientSecret },
 ];
 
 const missing = requiredVars.filter((v) => !v.value);
@@ -78,5 +87,6 @@ Object.freeze(config);
 Object.freeze(config.jwt);
 Object.freeze(config.booking);
 Object.freeze(config.redis);
+Object.freeze(config.cashfree);
 
 module.exports = config;

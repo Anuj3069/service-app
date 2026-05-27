@@ -428,6 +428,86 @@ class BookingService {
     return updated;
   }
 
+  /**
+   * Initiate Cashfree Payment for a COMPLETED booking
+   */
+  async payBooking(userId, bookingId) {
+    const booking = await bookingRepository.findById(bookingId);
+    if (!booking) {
+      throw AppError.notFound('Booking not found.');
+    }
+
+    if (booking.userId._id.toString() !== userId.toString()) {
+      throw AppError.forbidden('You do not have access to this booking.');
+    }
+
+    if (booking.status !== BOOKING_STATUS.COMPLETED) {
+      throw AppError.badRequest('Booking is not marked as completed yet. Payment can only be made on completion.');
+    }
+
+    if (booking.paymentStatus === 'paid') {
+      throw AppError.badRequest('Booking has already been paid.');
+    }
+
+    // Require paymentService here to avoid circular dependencies
+    const paymentService = require('../payment/payment.service');
+    const payment = await paymentService.createPaymentOrder(booking);
+
+    // Update booking's payment status to pending
+    await bookingRepository.updateById(bookingId, { paymentStatus: 'pending' });
+
+    return payment;
+  }
+
+  /**
+   * Finalize the payment status of a booking to 'paid'
+   */
+  async finalizePayment(bookingId, { io, socketStore } = {}) {
+    const booking = await bookingRepository.findById(bookingId);
+    if (!booking) {
+      throw AppError.notFound('Booking not found during payment finalization.');
+    }
+
+    if (booking.paymentStatus === 'paid') {
+      return booking;
+    }
+
+    const updated = await bookingRepository.updateById(bookingId, { paymentStatus: 'paid' });
+    logger.info(`💳 Booking ${bookingId} payment finalized to 'paid'`);
+
+    // Notify customer and worker via Socket.IO if available
+    if (io && socketStore) {
+      try {
+        // Customer
+        const customerSocketId = await socketStore.get(booking.userId._id.toString());
+        if (customerSocketId) {
+          io.to(customerSocketId).emit('booking-paid', {
+            bookingId: booking._id,
+            status: booking.status,
+            paymentStatus: 'paid',
+          });
+        }
+
+        // Provider/Worker
+        if (booking.providerId && booking.providerId.userId) {
+          const providerUserId = booking.providerId.userId._id.toString();
+          const providerSocketId = await socketStore.get(providerUserId);
+          if (providerSocketId) {
+            io.to(providerSocketId).emit('booking-paid', {
+              bookingId: booking._id,
+              status: booking.status,
+              paymentStatus: 'paid',
+            });
+          }
+        }
+      } catch (err) {
+        logger.error('Error emitting booking-paid socket events:', err);
+      }
+    }
+
+    return updated;
+  }
+
   // ─────────────────────────────────────────────────────────
   //  PRIVATE HELPERS
   // ─────────────────────────────────────────────────────────
