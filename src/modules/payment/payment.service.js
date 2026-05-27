@@ -29,7 +29,7 @@ class PaymentService {
    */
   async createPaymentOrder(booking) {
     // 1️⃣ Generate unique order ID
-
+    console.log(`Creating payment order for booking: ${booking._id}`)
     const orderId = `cf_${booking._id.toString()}_${Date.now()}`;
     const amount = booking.price;
 
@@ -45,6 +45,7 @@ class PaymentService {
     });
 
     if (existingPayment?.paymentSessionId) {
+      console.log(`Payment already exists for booking: ${booking._id}`)
       return existingPayment;
     }
 
@@ -80,6 +81,8 @@ class PaymentService {
         `Using Cashfree API URL: ${CASHFREE_BASE_URL}/orders`
       );
 
+      console.log(`Creating Cashfree Order for booking: ${booking._id} | Amount: ${amount}`)
+
       const response = await axios.post(
         `${CASHFREE_BASE_URL}/orders`,
         paymentOrder,
@@ -99,6 +102,8 @@ class PaymentService {
         `Cashfree order created successfully: ${cfOrder.order_id}`
       );
 
+      console.log(`Cashfree order created successfully: ${cfOrder.order_id}`)
+
       // 5️⃣ Save payment in DB only if API succeeds
       const payment = await Payment.create({
         bookingId: booking._id,
@@ -110,6 +115,8 @@ class PaymentService {
         status: 'PENDING',
         cfOrderId: cfOrder.cf_order_id || cfOrder.order_id,
       });
+
+      console.log(`Payment saved in DB successfully: ${payment._id}`)
 
       return payment;
     } catch (error) {
