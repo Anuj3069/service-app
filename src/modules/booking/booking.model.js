@@ -138,9 +138,18 @@ const bookingSchema = new mongoose.Schema(
     },
     paymentStatus: {
       type: String,
-      enum: ['unpaid', 'pending', 'paid'],
+      enum: ['unpaid', 'pending', 'paid', 'failed'],
       default: 'unpaid',
       index: true,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ['cashfree', 'cash', 'upi_qr'],
+      default: null,
+    },
+    paidAt: {
+      type: Date,
+      default: null,
     },
   },
   {

@@ -18,7 +18,10 @@ const handleWebhook = asyncHandler(async (req, res) => {
     throw AppError.unauthorized('Invalid webhook signature');
   }
 
-  await paymentService.processWebhookEvent(req.body);
+  await paymentService.processWebhookEvent(req.body, {
+    io: req.app.get('io'),
+    socketStore: req.app.get('socketStore'),
+  });
 
   ApiResponse.ok(res, null, 'Webhook processed successfully.');
 });
@@ -29,7 +32,10 @@ const handleWebhook = asyncHandler(async (req, res) => {
  */
 const getPaymentStatus = asyncHandler(async (req, res) => {
   const { bookingId } = req.params;
-  const payment = await paymentService.checkPaymentStatus(bookingId);
+  const payment = await paymentService.checkPaymentStatus(bookingId, {
+    io: req.app.get('io'),
+    socketStore: req.app.get('socketStore'),
+  });
   ApiResponse.ok(res, { status: payment.status, payment }, 'Payment status retrieved.');
 });
 
@@ -39,7 +45,10 @@ const getPaymentStatus = asyncHandler(async (req, res) => {
  */
 const verifyPayment = asyncHandler(async (req, res) => {
   const { bookingId } = req.params;
-  const result = await paymentService.verifyPayment(bookingId);
+  const result = await paymentService.verifyPayment(bookingId, {
+    io: req.app.get('io'),
+    socketStore: req.app.get('socketStore'),
+  });
   ApiResponse.ok(res, { status: result.status, orderId: result.orderId }, 'Payment verification completed.');
 });
 

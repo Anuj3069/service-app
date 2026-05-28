@@ -368,6 +368,41 @@ class BookingService {
   }
 
   /**
+   * Mark a completed booking as paid by cash.
+   */
+  async payBookingByCash(userId, bookingId, { io, socketStore } = {}) {
+    const booking = await bookingRepository.findById(bookingId);
+    if (!booking) {
+      throw AppError.notFound('Booking not found.');
+    }
+
+    if (booking.userId._id.toString() !== userId.toString()) {
+      throw AppError.forbidden('You do not have access to this booking.');
+    }
+
+    if (booking.status !== BOOKING_STATUS.COMPLETED) {
+      throw AppError.badRequest('Booking is not marked as completed yet. Cash payment can only be recorded on completion.');
+    }
+
+    if (booking.paymentStatus === 'paid') {
+      return booking;
+    }
+
+    const Payment = require('../payment/payment.model');
+    await Payment.create({
+      bookingId: booking._id,
+      userId: booking.userId._id,
+      orderId: `cash_${booking._id.toString()}_${Date.now()}`,
+      amount: booking.price,
+      status: 'paid',
+      method: 'cash',
+      paidAt: new Date(),
+    });
+
+    return this.finalizePayment(bookingId, { io, socketStore, paymentMethod: 'cash' });
+  }
+
+  /**
    * Get the completion OTP for a booking (customer-only)
    */
   async getCompletionOtp(userId, bookingId) {
@@ -454,7 +489,10 @@ class BookingService {
     const payment = await paymentService.createPaymentOrder(booking);
 
     // Update booking's payment status to pending
-    await bookingRepository.updateById(bookingId, { paymentStatus: 'pending' });
+    await bookingRepository.updateById(bookingId, {
+      paymentStatus: 'pending',
+      paymentMethod: 'cashfree',
+    });
 
     return payment;
   }
@@ -462,7 +500,7 @@ class BookingService {
   /**
    * Finalize the payment status of a booking to 'paid'
    */
-  async finalizePayment(bookingId, { io, socketStore } = {}) {
+  async finalizePayment(bookingId, { io, socketStore, paymentMethod = 'cashfree' } = {}) {
     const booking = await bookingRepository.findById(bookingId);
     if (!booking) {
       throw AppError.notFound('Booking not found during payment finalization.');
@@ -472,7 +510,11 @@ class BookingService {
       return booking;
     }
 
-    const updated = await bookingRepository.updateById(bookingId, { paymentStatus: 'paid' });
+    const updated = await bookingRepository.updateById(bookingId, {
+      paymentStatus: 'paid',
+      paymentMethod,
+      paidAt: new Date(),
+    });
     logger.info(`💳 Booking ${bookingId} payment finalized to 'paid'`);
 
     // Notify customer and worker via Socket.IO if available
@@ -485,6 +527,7 @@ class BookingService {
             bookingId: booking._id,
             status: booking.status,
             paymentStatus: 'paid',
+            paymentMethod,
           });
         }
 
@@ -497,6 +540,7 @@ class BookingService {
               bookingId: booking._id,
               status: booking.status,
               paymentStatus: 'paid',
+              paymentMethod,
             });
           }
         }

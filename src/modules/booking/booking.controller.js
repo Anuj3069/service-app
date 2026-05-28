@@ -89,6 +89,18 @@ const payBooking = asyncHandler(async (req, res) => {
 });
 
 /**
+ * POST /api/v1/user/bookings/:id/pay-cash
+ * Record cash payment for a completed booking
+ */
+const payBookingByCash = asyncHandler(async (req, res) => {
+  const booking = await bookingService.payBookingByCash(req.user.id, req.params.id, {
+    io: req.app.get('io'),
+    socketStore: req.app.get('socketStore'),
+  });
+  ApiResponse.ok(res, { booking }, 'Cash payment recorded successfully.');
+});
+
+/**
  * GET /api/v1/user/bookings/:id/otp
  * Customer retrieves the completion OTP for their accepted booking
  */
@@ -212,6 +224,7 @@ module.exports = {
   getBookingById,
   getCompletionOtp,
   payBooking,
+  payBookingByCash,
   getWorkerBookings,
   acceptBooking,
   rejectBooking,
