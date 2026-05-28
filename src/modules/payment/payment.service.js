@@ -267,11 +267,7 @@ class PaymentService {
       // No payment attempt yet
       if (!response.data || response.data.length === 0) {
         console.log('No payment attempt found yet')
-        return {
-          success: false,
-          payment_status: 'NOT_ATTEMPTED',
-          message: 'No payment attempt found yet',
-        };
+        return payment;
       }
 
       // Latest payment attempt
@@ -340,7 +336,7 @@ class PaymentService {
         );
       }
 
-      return latestPayment;
+      return payment;
     } catch (error) {
       console.log('Fetch payment error:', error.response?.data || error.message)
       logger.error(

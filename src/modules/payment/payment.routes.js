@@ -13,6 +13,7 @@ router.post('/webhook', handleWebhook);
 
 // Customer status polling route
 router.post('/:bookingId/verify', authenticate, verifyPayment);
+router.get('/:bookingId/status', authenticate, getPaymentStatus);
 
 
 module.exports = router;

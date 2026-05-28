@@ -45,6 +45,35 @@ jest.mock('cashfree-pg', () => {
   };
 });
 
+const axios = require('axios');
+
+jest.spyOn(axios, 'post').mockImplementation((url, data, config) => {
+  if (url && url.includes('/orders')) {
+    return Promise.resolve({
+      data: {
+        order_id: data.order_id,
+        payment_session_id: 'cf_session_abc123',
+        cf_order_id: 'cf_order_12345',
+      },
+    });
+  }
+  return Promise.reject(new Error('Unknown POST request: ' + url));
+});
+
+jest.spyOn(axios, 'get').mockImplementation((url, config) => {
+  if (url && url.includes('/payments')) {
+    return Promise.resolve({
+      data: [
+        {
+          payment_status: 'SUCCESS',
+          cf_payment_id: 99887766,
+        },
+      ],
+    });
+  }
+  return Promise.reject(new Error('Unknown GET request: ' + url));
+});
+
 const app = require('../../src/app');
 const { Category, Service } = require('../../src/modules/service/service.model');
 const Booking = require('../../src/modules/booking/booking.model');
