@@ -166,7 +166,7 @@ class PaymentService {
   /**
    * Process Verified Webhook Payload
    */
-  async processWebhookEvent(payload) {
+  async processWebhookEvent(payload, context = {}) {
     logger.info('Processing verified Cashfree Webhook payload:', JSON.stringify(payload));
 
     const { data } = payload;
@@ -200,7 +200,10 @@ class PaymentService {
 
       // Finalize the booking status to paid
       const bookingService = require('../booking/booking.service');
-      await bookingService.finalizePayment(payment.bookingId);
+      await bookingService.finalizePayment(payment.bookingId, {
+        ...context,
+        paymentMethod: payment.method || 'cashfree',
+      });
       logger.info(`Payment successfully updated to 'paid' for orderId: ${orderId}`);
     } else if (paymentStatus === 'FAILED' || paymentStatus === 'USER_DROPPED') {
       payment.status = 'failed';
@@ -222,11 +225,11 @@ class PaymentService {
    * update the DB if needed, and return the payment record.
    */
 
-  async verifyPayment(bookingId) {
-    return await this.checkPaymentStatus(bookingId);
+  async verifyPayment(bookingId, context = {}) {
+    return await this.checkPaymentStatus(bookingId, context);
   }
 
-  async checkPaymentStatus(bookingId) {
+  async checkPaymentStatus(bookingId, context = {}) {
     const payment = await Payment.findOne({ bookingId })
       .sort({ createdAt: -1 });
 
@@ -287,17 +290,13 @@ class PaymentService {
 
         await payment.save();
 
-        // Update booking payment status
-        await bookingRepository.updateById(payment.bookingId, {
-          paymentStatus: 'paid',
-        });
-
         // Finalize booking
         const bookingService = require('../booking/booking.service');
 
-        await bookingService.finalizePayment(
-          payment.bookingId
-        );
+        await bookingService.finalizePayment(payment.bookingId, {
+          ...context,
+          paymentMethod: payment.method || 'cashfree',
+        });
 
         logger.info(
           `Payment updated to PAID for orderId: ${payment.orderId}`
