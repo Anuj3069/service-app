@@ -109,7 +109,20 @@ class BookingRepository {
    */
   async findExpiredPending() {
     return Booking.find({
+      type: 'SCHEDULED',
       status: 'pending',
+      expiresAt: { $lte: new Date() },
+    });
+  }
+
+  /**
+   * Find expired instant booking requests for a specific provider
+   */
+  async findExpiredRequestedForProvider(providerId) {
+    return Booking.find({
+      type: 'INSTANT',
+      candidateProviders: providerId,
+      status: 'requested',
       expiresAt: { $lte: new Date() },
     });
   }
