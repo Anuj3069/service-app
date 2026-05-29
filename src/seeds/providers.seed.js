@@ -159,28 +159,29 @@ const providers = [
 const seedProviders = async () => {
   try {
     await mongoose.connect(config.mongoUri);
-    console.log('📦 Connected to MongoDB');
+    const logger = require('../../config/logger');
+    logger.info('📦 Connected to MongoDB');
 
     // Clear existing providers (but not all users)
     await Provider.deleteMany({});
     await User.deleteMany({ role: 'worker' });
-    console.log('🗑️  Cleared existing worker users and provider profiles');
+    logger.info('🗑️  Cleared existing worker users and provider profiles');
 
     for (const item of providers) {
       // Create worker user
       const user = await User.create(item.user);
-      console.log(`✅ Worker: ${user.name} (${user.email})`);
+      logger.info(`✅ Worker: ${user.name} (${user.email})`);
 
       // Create provider profile
       await Provider.create({
         userId: user._id,
         ...item.profile,
       });
-      console.log(`   └─ Profile created with skills: [${item.profile.skills.join(', ')}]`);
+      logger.info(`   └─ Profile created with skills: [${item.profile.skills.join(', ')}]`);
     }
 
-    console.log('\n🎉 Providers seeded successfully!');
-    console.log('📌 All worker passwords: password123');
+    logger.info('\n🎉 Providers seeded successfully!');
+    logger.info('📌 All worker passwords: password123');
     process.exit(0);
   } catch (error) {
     console.error('❌ Seed failed:', error.message);
