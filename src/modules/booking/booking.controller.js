@@ -11,6 +11,7 @@ const bookingService = require('./booking.service');
 const providerRepository = require('../provider/provider.repository');
 const AppError = require('../../shared/utils/api-error');
 const expiryScheduler = require('../../shared/utils/expiry-scheduler');
+const logger = require('../../config/logger');
 
 // ─────────────────────────────────────────────────────────────
 //  CUSTOMER ENDPOINTS
@@ -22,6 +23,30 @@ const expiryScheduler = require('../../shared/utils/expiry-scheduler');
  */
 const createBooking = asyncHandler(async (req, res) => {
   const booking = await bookingService.createBooking(req.user.id, req.body);
+
+  // Notify the assigned provider about the new scheduled booking
+  const io = req.app.get('io');
+  const socketStore = req.app.get('socketStore');
+  if (io && socketStore && booking.providerId && booking.providerId.userId) {
+    const providerUserId = booking.providerId.userId._id
+      ? booking.providerId.userId._id.toString()
+      : booking.providerId.userId.toString();
+    const socketId = await socketStore.get(providerUserId);
+    if (socketId) {
+      io.to(socketId).emit('new-scheduled-booking', {
+        bookingId: booking._id,
+        service: {
+          id: booking.serviceId._id,
+          name: booking.serviceId.name,
+        },
+        price: booking.price,
+        date: booking.date,
+        slot: booking.slot,
+        status: booking.status,
+      });
+    }
+  }
+
   ApiResponse.created(res, { booking }, 'Booking created successfully. Waiting for provider confirmation.');
 });
 
@@ -40,7 +65,7 @@ const createInstantBooking = asyncHandler(async (req, res) => {
     for (const userId of candidateUserIds) {
       const socketId = await socketStore.get(userId.toString());
       if (socketId) {
-        console.log(`[SOCKET DEBUG] Emitting 'new-booking-request' to userId: ${userId} (socketId: ${socketId})`);
+        logger.debug(`Emitting 'new-booking-request' to userId: ${userId} (socketId: ${socketId})`);
         io.to(socketId).emit('new-booking-request', {
           bookingId: booking._id,
           service: booking.serviceId,
@@ -49,7 +74,7 @@ const createInstantBooking = asyncHandler(async (req, res) => {
           expiresAt: booking.expiresAt,
         });
       } else {
-        console.log(`[SOCKET DEBUG] User ${userId} is not connected (no socketId found).`);
+        logger.debug(`User ${userId} is not connected (no socketId found).`);
       }
     }
   }
@@ -86,6 +111,18 @@ const getBookingById = asyncHandler(async (req, res) => {
 const payBooking = asyncHandler(async (req, res) => {
   const payment = await bookingService.payBooking(req.user.id, req.params.id);
   ApiResponse.ok(res, { payment }, 'Payment initiated. Use paymentSessionId to complete checkout.');
+});
+
+/**
+ * POST /api/v1/user/bookings/:id/pay-cash
+ * Record cash payment for a completed booking
+ */
+const payBookingByCash = asyncHandler(async (req, res) => {
+  const booking = await bookingService.payBookingByCash(req.user.id, req.params.id, {
+    io: req.app.get('io'),
+    socketStore: req.app.get('socketStore'),
+  });
+  ApiResponse.ok(res, { booking }, 'Cash payment recorded successfully.');
 });
 
 /**
@@ -165,7 +202,31 @@ const acceptBooking = asyncHandler(async (req, res) => {
     return ApiResponse.ok(res, { booking, type: 'INSTANT' }, 'Instant booking accepted successfully.');
   }
 
-  // Handle scheduled response
+  if (result.type === 'SCHEDULED') {
+    const booking = result.booking;
+    const io = req.app.get('io');
+    const socketStore = req.app.get('socketStore');
+
+    if (io && socketStore && booking.userId) {
+      const customerId = booking.userId._id
+        ? booking.userId._id.toString()
+        : booking.userId.toString();
+      const customerSocketId = await socketStore.get(customerId);
+      if (customerSocketId) {
+        io.to(customerSocketId).emit('booking-accepted', {
+          bookingId: booking._id,
+          provider: {
+            id: providerId,
+            name: req.user.name || 'Provider',
+          },
+          status: 'ACCEPTED',
+        });
+      }
+    }
+
+    return ApiResponse.ok(res, { booking, type: 'SCHEDULED' }, 'Booking accepted successfully.');
+  }
+
   ApiResponse.ok(res, { booking: result.booking }, 'Booking accepted successfully.');
 });
 
@@ -175,6 +236,23 @@ const acceptBooking = asyncHandler(async (req, res) => {
 const rejectBooking = asyncHandler(async (req, res) => {
   const providerId = await _getProviderId(req.user.id);
   const booking = await bookingService.rejectBooking(providerId, req.params.id);
+
+  const io = req.app.get('io');
+  const socketStore = req.app.get('socketStore');
+  if (io && socketStore && booking.userId) {
+    const customerId = booking.userId._id
+      ? booking.userId._id.toString()
+      : booking.userId.toString();
+    const customerSocketId = await socketStore.get(customerId);
+    if (customerSocketId) {
+      io.to(customerSocketId).emit('booking-rejected', {
+        bookingId: booking._id,
+        status: 'REJECTED',
+        message: 'Your scheduled booking request was rejected by the provider.',
+      });
+    }
+  }
+
   ApiResponse.ok(res, { booking }, 'Booking rejected.');
 });
 
@@ -212,6 +290,7 @@ module.exports = {
   getBookingById,
   getCompletionOtp,
   payBooking,
+  payBookingByCash,
   getWorkerBookings,
   acceptBooking,
   rejectBooking,

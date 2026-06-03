@@ -60,7 +60,9 @@ const userSchema = new mongoose.Schema(
 );
 
 // ── Indexes ───────────────────────────────────────────────
-userSchema.index({ email: 1 });
+// `unique: true` on the email field creates the index; avoid duplicate index warnings
+// by not declaring the same index again with `schema.index()`.
+// Keep an index on `role` for efficient role-based queries.
 userSchema.index({ role: 1 });
 
 // ── Pre-save: Hash Password ──────────────────────────────

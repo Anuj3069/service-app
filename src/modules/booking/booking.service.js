@@ -186,13 +186,16 @@ class BookingService {
       throw AppError.notFound('Booking not found.');
     }
 
-    // Ensure the booking belongs to this user
     if (booking.userId._id.toString() !== userId.toString()) {
       throw AppError.forbidden('You do not have access to this booking.');
     }
 
-    // Check and update expired status
-    if (booking.status === BOOKING_STATUS.PENDING && booking.isExpired) {
+    const isExpiredBooking =
+      [BOOKING_STATUS.PENDING, BOOKING_STATUS.REQUESTED].includes(booking.status) &&
+      booking.expiresAt &&
+      new Date() > booking.expiresAt;
+
+    if (isExpiredBooking) {
       await bookingRepository.updateById(bookingId, { status: BOOKING_STATUS.EXPIRED });
       booking.status = BOOKING_STATUS.EXPIRED;
     }
@@ -213,7 +216,7 @@ class BookingService {
       filters.status = status;
     }
 
-    // First, auto-expire any pending bookings that have passed their expiresAt
+    // First, auto-expire any stale bookings that have passed their expiresAt
     await this._expireStaleBookings(providerId);
 
     // Get regular bookings assigned to this provider
@@ -235,12 +238,14 @@ class BookingService {
     const filters = {
       type: 'INSTANT',
       candidateProviders: providerId,
-      status: 'requested', // Only show active instant booking requests
+      status: BOOKING_STATUS.REQUESTED, // Only show active instant booking requests
     };
 
     if (status) {
       filters.status = status;
     }
+
+    filters.expiresAt = { $gt: new Date() };
 
     return BookingModel.find(filters)
       .populate('userId', 'name email phone')
@@ -326,14 +331,34 @@ class BookingService {
     // 4. Validate status transition
     this._validateTransition(booking.status, BOOKING_STATUS.ACCEPTED);
 
-    // 5. Update booking — generate OTP for completion verification
+    // 5. Atomically update booking — generate OTP for completion verification
     const otp = this._generateOtp();
-    const updated = await bookingRepository.updateById(bookingId, {
-      status: BOOKING_STATUS.ACCEPTED,
-      acceptedAt: new Date(),
-      expiresAt: null, // Clear expiry after acceptance
-      completionOtp: otp,
-    });
+    const BookingModel = require('./booking.model');
+    const updated = await BookingModel.findOneAndUpdate(
+      {
+        _id: bookingId,
+        providerId,
+        status: BOOKING_STATUS.PENDING,
+      },
+      {
+        status: BOOKING_STATUS.ACCEPTED,
+        acceptedAt: new Date(),
+        expiresAt: null,
+        completionOtp: otp,
+      },
+      { new: true }
+    )
+      .populate('userId', 'name email phone')
+      .populate('serviceId', 'name basePrice duration')
+      .populate({
+        path: 'providerId',
+        select: 'userId skills rating',
+        populate: { path: 'userId', select: 'name email phone' },
+      });
+
+    if (!updated) {
+      throw AppError.gone('This booking has already been updated or is no longer available to accept.');
+    }
 
     logger.info(`✅ Booking accepted: ${bookingId} by provider: ${providerId} | OTP: ${otp}`);
 
@@ -356,15 +381,70 @@ class BookingService {
 
     this._validateTransition(booking.status, BOOKING_STATUS.REJECTED);
 
-    const updated = await bookingRepository.updateById(bookingId, {
-      status: BOOKING_STATUS.REJECTED,
-      rejectedAt: new Date(),
-      expiresAt: null,
-    });
+    const BookingModel = require('./booking.model');
+    const updated = await BookingModel.findOneAndUpdate(
+      {
+        _id: bookingId,
+        providerId,
+        status: booking.status,
+      },
+      {
+        status: BOOKING_STATUS.REJECTED,
+        rejectedAt: new Date(),
+        expiresAt: null,
+      },
+      { new: true }
+    )
+      .populate('userId', 'name email phone')
+      .populate('serviceId', 'name basePrice duration')
+      .populate({
+        path: 'providerId',
+        select: 'userId skills rating',
+        populate: { path: 'userId', select: 'name email phone' },
+      });
+
+    if (!updated) {
+      throw AppError.gone('This booking has already been updated or is no longer available to reject.');
+    }
 
     logger.info(`❌ Booking rejected: ${bookingId} by provider: ${providerId}`);
 
     return updated;
+  }
+
+  /**
+   * Mark a completed booking as paid by cash.
+   */
+  async payBookingByCash(userId, bookingId, { io, socketStore } = {}) {
+    const booking = await bookingRepository.findById(bookingId);
+    if (!booking) {
+      throw AppError.notFound('Booking not found.');
+    }
+
+    if (booking.userId._id.toString() !== userId.toString()) {
+      throw AppError.forbidden('You do not have access to this booking.');
+    }
+
+    if (booking.status !== BOOKING_STATUS.COMPLETED) {
+      throw AppError.badRequest('Booking is not marked as completed yet. Cash payment can only be recorded on completion.');
+    }
+
+    if (booking.paymentStatus === 'paid') {
+      return booking;
+    }
+
+    const Payment = require('../payment/payment.model');
+    await Payment.create({
+      bookingId: booking._id,
+      userId: booking.userId._id,
+      orderId: `cash_${booking._id.toString()}_${Date.now()}`,
+      amount: booking.price,
+      status: 'paid',
+      method: 'cash',
+      paidAt: new Date(),
+    });
+
+    return this.finalizePayment(bookingId, { io, socketStore, paymentMethod: 'cash' });
   }
 
   /**
@@ -454,7 +534,10 @@ class BookingService {
     const payment = await paymentService.createPaymentOrder(booking);
 
     // Update booking's payment status to pending
-    await bookingRepository.updateById(bookingId, { paymentStatus: 'pending' });
+    await bookingRepository.updateById(bookingId, {
+      paymentStatus: 'pending',
+      paymentMethod: 'cashfree',
+    });
 
     return payment;
   }
@@ -462,7 +545,7 @@ class BookingService {
   /**
    * Finalize the payment status of a booking to 'paid'
    */
-  async finalizePayment(bookingId, { io, socketStore } = {}) {
+  async finalizePayment(bookingId, { io, socketStore, paymentMethod = 'cashfree' } = {}) {
     const booking = await bookingRepository.findById(bookingId);
     if (!booking) {
       throw AppError.notFound('Booking not found during payment finalization.');
@@ -472,7 +555,11 @@ class BookingService {
       return booking;
     }
 
-    const updated = await bookingRepository.updateById(bookingId, { paymentStatus: 'paid' });
+    const updated = await bookingRepository.updateById(bookingId, {
+      paymentStatus: 'paid',
+      paymentMethod,
+      paidAt: new Date(),
+    });
     logger.info(`💳 Booking ${bookingId} payment finalized to 'paid'`);
 
     // Notify customer and worker via Socket.IO if available
@@ -485,6 +572,7 @@ class BookingService {
             bookingId: booking._id,
             status: booking.status,
             paymentStatus: 'paid',
+            paymentMethod,
           });
         }
 
@@ -497,6 +585,7 @@ class BookingService {
               bookingId: booking._id,
               status: booking.status,
               paymentStatus: 'paid',
+              paymentMethod,
             });
           }
         }
@@ -533,13 +622,16 @@ class BookingService {
    */
   async _expireStaleBookings(providerId) {
     try {
-      const expired = await bookingRepository.findExpiredPending();
-      const providerExpired = expired.filter(
+      const expiredScheduled = await bookingRepository.findExpiredPending();
+      const scheduledForProvider = expiredScheduled.filter(
         (b) => b.providerId.toString() === providerId.toString()
       );
 
-      if (providerExpired.length > 0) {
-        const ids = providerExpired.map((b) => b._id);
+      const expiredRequested = await bookingRepository.findExpiredRequestedForProvider(providerId);
+
+      const allExpired = [...scheduledForProvider, ...expiredRequested];
+      if (allExpired.length > 0) {
+        const ids = allExpired.map((b) => b._id);
         await bookingRepository.markExpired(ids);
         logger.info(`⏰ Auto-expired ${ids.length} stale bookings for provider: ${providerId}`);
       }

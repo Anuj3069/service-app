@@ -5,7 +5,7 @@
  */
 
 const crypto = require('crypto');
-const { Cashfree } = require('cashfree-pg');
+// Cashfree SDK is optional; direct HTTP calls via axios are used in tests/mocks.
 const config = require('../../config');
 const logger = require('../../config/logger');
 const AppError = require('../../shared/utils/api-error');
@@ -30,12 +30,12 @@ class PaymentService {
    */
   async createPaymentOrder(booking) {
     // 1️⃣ Generate unique order ID
-    console.log(`Creating payment order for booking: ${booking._id}`)
+    logger.info(`Creating payment order for booking: ${booking._id}`);
     const orderId = `cf_${booking._id.toString()}_${Date.now()}`;
     const amount = booking.price;
 
     // 2️⃣ Prevent payment for already paid bookings
-    if (booking.paymentStatus === 'PAID') {
+    if (booking.paymentStatus === 'paid') {
       throw AppError.badRequest('Booking already paid');
     }
 
@@ -46,16 +46,13 @@ class PaymentService {
     });
 
     if (existingPayment?.paymentSessionId) {
-      console.log(`Payment already exists for booking: ${booking._id}`)
+      logger.info(`Payment already exists for booking: ${booking._id}`);
       return existingPayment;
     }
 
     // 4️⃣ Prepare customer details
-    const customerPhone = booking.userId.phone || '9999999999';
-
-    // Ensure valid 10-digit phone
-    const cleanPhone =
-      customerPhone.replace(/\D/g, '').slice(-10) || '9999999999';
+    const customerPhone = booking.userId?.phone || '9999999999';
+    const cleanPhone = customerPhone.replace(/\D/g, '').slice(-10) || '9999999999';
 
     const paymentOrder = {
       order_amount: amount,
@@ -65,24 +62,14 @@ class PaymentService {
         customer_id: booking.userId._id.toString(),
         customer_phone: cleanPhone,
         customer_name: booking.userId.name || 'Customer',
-        customer_email:
-          booking.userId.email || 'customer@example.com',
+        customer_email: booking.userId.email || 'customer@example.com',
       },
-      order_meta: {
-        // return_url: `${config.app.baseUrl}/payment-status?order_id={order_id}`,
-      },
+      order_meta: {},
     };
 
     try {
-      logger.info(
-        `Creating Cashfree Order for booking: ${booking._id} | Amount: ${amount}`
-      );
-
-      logger.info(
-        `Using Cashfree API URL: ${CASHFREE_BASE_URL}/orders`
-      );
-
-      console.log(`Creating Cashfree Order for booking: ${booking._id} | Amount: ${amount}`)
+      logger.info(`Creating Cashfree order for booking: ${booking._id} | Amount: ${amount}`);
+      logger.debug(`Cashfree order payload: ${JSON.stringify(paymentOrder)}`);
 
       const response = await axios.post(
         `${CASHFREE_BASE_URL}/orders`,
@@ -97,41 +84,34 @@ class PaymentService {
         }
       );
 
-      const cfOrder = response.data;
+      const cfOrder = response.data?.order || response.data;
+      const orderIdValue = cfOrder?.order_id || cfOrder?.cf_order_id;
+      if (!orderIdValue) {
+        throw new Error('Invalid response from Cashfree order creation');
+      }
 
-      logger.info(
-        `Cashfree order created successfully: ${cfOrder.order_id}`
-      );
+      logger.info(`Cashfree order created successfully: ${orderIdValue}`);
 
-      console.log(`Cashfree order created successfully: ${cfOrder.order_id}`)
-
-      // 5️⃣ Save payment in DB only if API succeeds
       const payment = await Payment.create({
         bookingId: booking._id,
         userId: booking.userId._id,
-        orderId: cfOrder.order_id,
-        paymentSessionId: cfOrder.payment_session_id,
-        amount: amount,
+        orderId: orderIdValue,
+        paymentSessionId: cfOrder?.payment_session_id || null,
+        amount,
         currency: 'INR',
         status: 'pending',
-        cfOrderId: cfOrder.cf_order_id || cfOrder.order_id,
+        cfOrderId: cfOrder?.cf_order_id || orderIdValue,
       });
 
-      console.log(`Payment saved in DB successfully: ${payment._id}`)
-
+      logger.info(`Payment saved in DB successfully: ${payment._id}`);
       return payment;
     } catch (error) {
-      console.log('Cashfree order creation failed:',
-        error.response?.data || error.message)
-
-      logger.error(
-        'Cashfree order creation failed:',
-        error.response?.data || error.message
-      );
-
+      const errorDetail = error.response?.data || error.message;
+      logger.error('Cashfree order creation failed:', errorDetail);
       throw AppError.badRequest(
         error.response?.data?.message ||
-        'Payment gateway error'
+          error.message ||
+          'Payment gateway error'
       );
     }
   }
@@ -166,50 +146,58 @@ class PaymentService {
   /**
    * Process Verified Webhook Payload
    */
-  async processWebhookEvent(payload) {
-    logger.info('Processing verified Cashfree Webhook payload:', JSON.stringify(payload));
+  async processWebhookEvent(payload, context = {}) {
+    logger.info('Processing verified Cashfree webhook payload');
 
-    const { data } = payload;
-    if (!data || !data.order || !data.payment) {
-      logger.warn('Invalid webhook payload structure.');
+    const payloadData = payload.data || payload;
+    const orderData = payloadData.order || payloadData;
+    const paymentData = payloadData.payment || payloadData;
+
+    const orderId = orderData?.order_id;
+    const paymentStatus = String(
+      paymentData?.payment_status || paymentData?.status || ''
+    ).toUpperCase();
+    const cfPaymentId = paymentData?.cf_payment_id || paymentData?.payment_id;
+    const paidAt = paymentData?.payment_time || paymentData?.paid_at;
+
+    if (!orderId || !paymentStatus) {
+      logger.warn('Invalid webhook payload structure. Missing orderId or paymentStatus.');
       return;
     }
 
-    const orderId = data.order.order_id;
-    const paymentStatus = data.payment.payment_status; // e.g. 'SUCCESS', 'FAILED'
-    const cfPaymentId = data.payment.cf_payment_id;
-    const paidAt = data.payment.payment_time;
-
-    // Find the corresponding Payment record
     const payment = await Payment.findOne({ orderId });
     if (!payment) {
-      logger.warn(`No payment record found in database for orderId: ${orderId}`);
+      logger.warn(`No payment record found for orderId: ${orderId}`);
       return;
     }
 
     if (payment.status === 'paid') {
-      logger.info(`Payment for orderId ${orderId} is already completed.`);
+      logger.info(`Payment for orderId ${orderId} is already marked paid.`);
       return;
     }
 
     if (paymentStatus === 'SUCCESS') {
       payment.status = 'paid';
-      payment.cfPaymentId = cfPaymentId.toString();
+      if (cfPaymentId) payment.cfPaymentId = cfPaymentId.toString();
       payment.paidAt = paidAt ? new Date(paidAt) : new Date();
       await payment.save();
 
-      // Finalize the booking status to paid
       const bookingService = require('../booking/booking.service');
-      await bookingService.finalizePayment(payment.bookingId);
-      logger.info(`Payment successfully updated to 'paid' for orderId: ${orderId}`);
-    } else if (paymentStatus === 'FAILED' || paymentStatus === 'USER_DROPPED') {
+      await bookingService.finalizePayment(payment.bookingId, {
+        ...context,
+        paymentMethod: payment.method || payment.paymentMethod || 'cashfree',
+      });
+      logger.info(`Payment updated to 'paid' for orderId: ${orderId}`);
+    } else if (['FAILED', 'USER_DROPPED', 'NOT_ATTEMPTED'].includes(paymentStatus)) {
       payment.status = 'failed';
-      payment.cfPaymentId = cfPaymentId ? cfPaymentId.toString() : undefined;
+      if (cfPaymentId) payment.cfPaymentId = cfPaymentId.toString();
       await payment.save();
-
-      // Update booking paymentStatus to failed
       await bookingRepository.updateById(payment.bookingId, { paymentStatus: 'failed' });
       logger.info(`Payment updated to 'failed' for orderId: ${orderId}`);
+    } else {
+      payment.status = paymentStatus.toLowerCase();
+      await payment.save();
+      logger.info(`Payment left as ${payment.status} for orderId: ${orderId}`);
     }
   }
 
@@ -222,11 +210,11 @@ class PaymentService {
    * update the DB if needed, and return the payment record.
    */
 
-  async verifyPayment(bookingId) {
-    return await this.checkPaymentStatus(bookingId);
+  async verifyPayment(bookingId, context = {}) {
+    return await this.checkPaymentStatus(bookingId, context);
   }
 
-  async checkPaymentStatus(bookingId) {
+  async checkPaymentStatus(bookingId, context = {}) {
     const payment = await Payment.findOne({ bookingId })
       .sort({ createdAt: -1 });
 
@@ -242,11 +230,7 @@ class PaymentService {
     }
 
     try {
-      logger.info(
-        `Fetching payment status from Cashfree for orderId: ${payment.orderId}`
-      );
-
-      console.log(`Fetching payment status from Cashfree for orderId: ${payment.orderId}`)
+      logger.info(`Fetching payment status from Cashfree for orderId: ${payment.orderId}`);
       const response = await axios.get(
         `${CASHFREE_BASE_URL}/orders/${payment.orderId}/payments`,
         {
@@ -259,94 +243,56 @@ class PaymentService {
         }
       );
 
-      console.log(`Cashfree payment response: ${JSON.stringify(response.data)}`)
-      logger.info(
-        `Cashfree payment response: ${JSON.stringify(response.data)}`
-      );
+      const cashfreeResponse = response.data;
+      logger.info(`Cashfree payment response: ${JSON.stringify(cashfreeResponse)}`);
 
-      // No payment attempt yet
-      if (!response.data || response.data.length === 0) {
-        console.log('No payment attempt found yet')
-        return {
-          success: false,
-          payment_status: 'NOT_ATTEMPTED',
-          message: 'No payment attempt found yet',
-        };
+      const payments = Array.isArray(cashfreeResponse)
+        ? cashfreeResponse
+        : cashfreeResponse.data || cashfreeResponse.payments || [];
+
+      if (!payments || payments.length === 0) {
+        logger.debug('No payment attempt found yet for this order');
+        return payment;
       }
 
-      // Latest payment attempt
-      const latestPayment = response.data[0];
+      const latestPayment = payments[0];
+      const latestStatus = String(
+        latestPayment.payment_status || latestPayment.status || ''
+      ).toUpperCase();
 
-      console.log(`Latest payment status: ${latestPayment.payment_status}`)
-      logger.info(
-        `Latest payment status: ${latestPayment.payment_status}`
-      );
+      logger.info(`Latest payment status: ${latestStatus}`);
 
-      // SUCCESS
-      if (latestPayment.payment_status === 'SUCCESS') {
-        console.log('Payment status is SUCCESS')
+      if (latestStatus === 'SUCCESS') {
+        logger.info('Payment status is SUCCESS');
         payment.status = 'paid';
         payment.paidAt = new Date();
-        payment.cfPaymentId = latestPayment.cf_payment_id;
-
+        payment.cfPaymentId = latestPayment.cf_payment_id || latestPayment.payment_id;
         await payment.save();
 
-        // Update booking payment status
-        await bookingRepository.updateById(payment.bookingId, {
-          paymentStatus: 'paid',
+        const bookingService = require('../booking/booking.service');
+        await bookingService.finalizePayment(payment.bookingId, {
+          ...context,
+          paymentMethod: payment.method || payment.paymentMethod || 'cashfree',
         });
 
-        // Finalize booking
-        const bookingService = require('../booking/booking.service');
-
-        await bookingService.finalizePayment(
-          payment.bookingId
-        );
-
-        logger.info(
-          `Payment updated to PAID for orderId: ${payment.orderId}`
-        );
-      }
-
-      // FAILED
-      else if (
-        latestPayment.payment_status === 'FAILED'
-      ) {
-        console.log('Payment status is FAILED')
+        logger.info(`Payment updated to PAID for orderId: ${payment.orderId}`);
+      } else if (latestStatus === 'FAILED') {
+        logger.warn('Payment status is FAILED');
         payment.status = 'failed';
-
         await payment.save();
-
         await bookingRepository.updateById(payment.bookingId, {
           paymentStatus: 'failed',
         });
-
-        console.log('Payment status updated to FAILED for orderId: ${payment.orderId}')
-
-        logger.info(
-          `Payment updated to FAILED for orderId: ${payment.orderId}`
-        );
-      }
-
-      // PENDING / USER_DROPPED / NOT_ATTEMPTED
-      else {
-        payment.status =
-          latestPayment.payment_status.toLowerCase();
-
+        logger.info(`Payment updated to FAILED for orderId: ${payment.orderId}`);
+      } else {
+        payment.status = latestStatus.toLowerCase() || 'pending';
         await payment.save();
-
-        logger.info(
-          `Payment still pending for orderId: ${payment.orderId}`
-        );
+        logger.info(`Payment left as ${payment.status} for orderId: ${payment.orderId}`);
       }
 
-      return latestPayment;
+      return payment;
     } catch (error) {
-      console.log('Fetch payment error:', error.response?.data || error.message)
-      logger.error(
-        'Fetch payment error:',
-        error.response?.data || error.message
-      );
+      logger.error('Fetch payment error:', error.response?.data || error.message);
 
       throw AppError.badRequest(
         error.response?.data?.message ||

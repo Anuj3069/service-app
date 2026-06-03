@@ -125,17 +125,18 @@ const seedData = [
 const seedServices = async () => {
   try {
     await mongoose.connect(config.mongoUri);
-    console.log('📦 Connected to MongoDB');
+    const logger = require('../../config/logger');
+    logger.info('📦 Connected to MongoDB');
 
     // Clear existing data
     await Category.deleteMany({});
     await Service.deleteMany({});
-    console.log('🗑️  Cleared existing categories and services');
+    logger.info('🗑️  Cleared existing categories and services');
 
     for (const item of seedData) {
       // Create category
       const category = await Category.create(item.category);
-      console.log(`✅ Category: ${category.name}`);
+      logger.info(`✅ Category: ${category.name}`);
 
       // Create services for this category
       const services = item.services.map((s) => ({
@@ -144,10 +145,10 @@ const seedServices = async () => {
       }));
 
       await Service.insertMany(services);
-      console.log(`   └─ ${services.length} services created`);
+      logger.info(`   └─ ${services.length} services created`);
     }
 
-    console.log('\n🎉 Services seeded successfully!');
+    logger.info('\n🎉 Services seeded successfully!');
     process.exit(0);
   } catch (error) {
     console.error('❌ Seed failed:', error.message);

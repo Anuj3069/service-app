@@ -27,7 +27,6 @@ const paymentSchema = new mongoose.Schema(
     },
     paymentSessionId: {
       type: String,
-      required: true,
     },
     amount: {
       type: Number,
@@ -38,6 +37,12 @@ const paymentSchema = new mongoose.Schema(
       type: String,
       enum: ['pending', 'paid', 'failed'],
       default: 'pending',
+      index: true,
+    },
+    method: {
+      type: String,
+      enum: ['cashfree', 'cash', 'upi_qr'],
+      default: 'cashfree',
       index: true,
     },
     cfOrderId: {

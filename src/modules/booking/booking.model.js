@@ -138,9 +138,18 @@ const bookingSchema = new mongoose.Schema(
     },
     paymentStatus: {
       type: String,
-      enum: ['unpaid', 'pending', 'paid'],
+      enum: ['unpaid', 'pending', 'paid', 'failed'],
       default: 'unpaid',
       index: true,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ['cashfree', 'cash', 'upi_qr'],
+      default: null,
+    },
+    paidAt: {
+      type: Date,
+      default: null,
     },
   },
   {
@@ -167,10 +176,8 @@ bookingSchema.index({ userId: 1, status: 1, createdAt: -1 });
 // Worker's assigned bookings
 bookingSchema.index({ providerId: 1, status: 1, createdAt: -1 });
 
-// TTL index for auto-expiring PENDING bookings
-// MongoDB will automatically delete documents where expiresAt has passed
-// We'll handle expiry in our service layer for more control
-bookingSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// NOTE: We do not use MongoDB TTL deletion for booking expiries.
+// Expiry is handled in service logic to preserve booking history and status.
 
 // ── PRE-SAVE: Auto-expire check ────────────────────────────
 bookingSchema.pre('find', function () {
