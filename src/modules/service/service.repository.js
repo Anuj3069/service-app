@@ -61,6 +61,28 @@ class ServiceRepository {
   async bulkCreateServices(data) {
     return Service.insertMany(data);
   }
+
+  /**
+   * Update category
+   */
+  async updateCategory(id, updateData) {
+    return Category.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
+  }
+
+  /**
+   * Update service
+   */
+  async updateService(id, updateData) {
+    return Service.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
+  }
 }
 
 module.exports = new ServiceRepository();

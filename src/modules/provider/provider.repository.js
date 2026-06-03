@@ -139,6 +139,45 @@ class ProviderRepository {
       totalReviews,
     });
   }
+
+  /**
+   * Find providers with filters and pagination
+   */
+  async findAll(filters = {}, pagination = {}) {
+    const { page = 1, limit = 20, sort = '-createdAt' } = pagination;
+    const skip = (page - 1) * limit;
+
+    const query = {};
+    if (filters.isVerified !== undefined) query.isVerified = filters.isVerified;
+    if (filters.isAvailable !== undefined) query.isAvailable = filters.isAvailable;
+    if (filters.skills) {
+      const skillList = Array.isArray(filters.skills) ? filters.skills : [filters.skills];
+      query.skills = { $in: skillList.map(s => s.toLowerCase().trim()) };
+    }
+
+    const items = await Provider.find(query)
+      .populate('userId', 'name email phone')
+      .sort(sort)
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Provider.countDocuments(query);
+
+    return { items, total, page, limit };
+  }
+
+  /**
+   * Update provider profile by its main ID
+   */
+  async updateById(id, updateData) {
+    const provider = await Provider.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    ).populate('userId', 'name email phone');
+    await cache.delPattern('cache:providers:*');
+    return provider;
+  }
 }
 
 module.exports = new ProviderRepository();
