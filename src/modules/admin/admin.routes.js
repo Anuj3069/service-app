@@ -15,6 +15,9 @@ const router = Router();
 // Protect all admin endpoints with authentication and ROLES.ADMIN check
 router.use(authenticate, authorize(ROLES.ADMIN));
 
+// ── DASHBOARD STATS ──────────────────────────────────────────
+router.get('/dashboard-stats', adminController.getDashboardStats);
+
 // ── USER ROUTES ──────────────────────────────────────────────
 router.get('/users', validate(adminValidation.listUsersSchema), adminController.listUsers);
 router.patch('/users/:id/status', validate(adminValidation.toggleUserStatusSchema), adminController.toggleUserStatus);

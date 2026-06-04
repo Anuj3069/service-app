@@ -6,6 +6,13 @@ const asyncHandler = require('../../shared/middleware/async-handler');
 const ApiResponse = require('../../shared/utils/api-response');
 const adminService = require('./admin.service');
 
+// ── DASHBOARD ────────────────────────────────────────────────
+
+const getDashboardStats = asyncHandler(async (req, res) => {
+  const stats = await adminService.getDashboardStats();
+  ApiResponse.ok(res, stats, 'Dashboard stats retrieved successfully.');
+});
+
 // ── USER CONTROLLERS ─────────────────────────────────────────
 
 const listUsers = asyncHandler(async (req, res) => {
@@ -156,6 +163,7 @@ const deleteReview = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  getDashboardStats,
   listUsers,
   toggleUserStatus,
   updateUserRole,

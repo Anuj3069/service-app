@@ -8,6 +8,8 @@ const providerRepository = require('../provider/provider.repository');
 const serviceRepository = require('../service/service.repository');
 const bookingRepository = require('../booking/booking.repository');
 const { Category, Service } = require('../service/service.model');
+const User = require('../auth/auth.model');
+const Provider = require('../provider/provider.model');
 const Booking = require('../booking/booking.model');
 const Payment = require('../payment/payment.model');
 const Review = require('../review/review.model');
@@ -21,6 +23,109 @@ const CACHE_KEYS = {
 };
 
 class AdminService {
+  // ── DASHBOARD STATS ───────────────────────────────────────────
+
+  async getDashboardStats() {
+    const [
+      totalUsers,
+      totalProviders,
+      activeBookings,
+      revenueResult,
+      bookingStatusCounts,
+      recentBookings,
+      recentPayments,
+    ] = await Promise.all([
+      // Total platform users
+      User.countDocuments(),
+
+      // Total verified providers
+      Provider.countDocuments(),
+
+      // Active bookings (requested, pending, accepted)
+      Booking.countDocuments({
+        status: { $in: ['requested', 'pending', 'accepted'] },
+      }),
+
+      // Total paid revenue using aggregation
+      Payment.aggregate([
+        { $match: { status: 'paid' } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+
+      // Booking status distribution
+      Booking.aggregate([
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+
+      // Recent bookings for activity feed
+      Booking.find()
+        .populate('userId', 'name')
+        .sort('-createdAt')
+        .limit(5)
+        .lean(),
+
+      // Recent payments for activity feed
+      Payment.find()
+        .sort('-createdAt')
+        .limit(5)
+        .lean(),
+    ]);
+
+    // Parse revenue
+    const totalPaidRevenue =
+      revenueResult.length > 0 ? revenueResult[0].total : 0;
+
+    // Parse booking status distribution
+    const statusMap = {};
+    bookingStatusCounts.forEach((s) => {
+      statusMap[s._id] = s.count;
+    });
+
+    const countRequested = statusMap['requested'] || 0;
+    const countAccepted =
+      (statusMap['pending'] || 0) + (statusMap['accepted'] || 0);
+    const countCompleted = statusMap['completed'] || 0;
+
+    // Build activity feed
+    const activities = [];
+
+    recentBookings.forEach((b) => {
+      activities.push({
+        text: `Booking ${b._id.toString().substring(18)} was set to '${b.status}' for ${b.userId?.name || 'Customer'}`,
+        time: b.createdAt,
+        type: 'booking',
+      });
+    });
+
+    recentPayments.forEach((p) => {
+      activities.push({
+        text: `Payment order for ₹${p.amount} set to status '${p.status}'`,
+        time: p.createdAt,
+        type: 'payment',
+      });
+    });
+
+    // Sort by time descending and take top 6
+    activities.sort((a, b) => new Date(b.time) - new Date(a.time));
+    const recentActivities = activities.slice(0, 6);
+
+    return {
+      totalUsers,
+      totalProviders,
+      activeBookings,
+      totalPaidRevenue,
+      countRequested,
+      countAccepted,
+      countCompleted,
+      recentActivities,
+    };
+  }
+
   // ── USER MANAGEMENT ──────────────────────────────────────────
 
   async listUsers(filters, pagination) {
