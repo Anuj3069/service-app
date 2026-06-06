@@ -24,7 +24,6 @@ process.env.BOOKING_EXPIRY_MINUTES = '5'; // Extended for test stability
 
 const app = require('../../src/app');
 const { Category, Service } = require('../../src/modules/service/service.model');
-const { generateToken } = require('../helpers/auth.helper');
 
 let mongoServer;
 
