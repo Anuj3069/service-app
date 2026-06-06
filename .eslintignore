@@ -1,4 +1,0 @@
-# Ignore compiled and generated files
-**/dist/**
-**/build/**
-**/*.js.map

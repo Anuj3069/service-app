@@ -39,7 +39,7 @@ afterAll(async () => {
 });
 
 describe('MatchService', () => {
-  let testService, provider1;
+  let testService, provider1, provider2;
 
   beforeEach(async () => {
     // Setup: category + service
@@ -80,7 +80,7 @@ describe('MatchService', () => {
       isAvailable: true,
     });
 
-    await Provider.create({
+    provider2 = await Provider.create({
       userId: worker2._id,
       skills: ['plumbing', 'pipe-repair'],
       availability: [

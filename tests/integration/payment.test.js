@@ -23,7 +23,7 @@ jest.mock('cashfree-pg', () => {
         SANDBOX: 'SANDBOX',
         PRODUCTION: 'PRODUCTION',
       },
-      PGCreateOrder: jest.fn().mockImplementation((_payload) => {
+      PGCreateOrder: jest.fn().mockImplementation((payload) => {
         return Promise.resolve({
           data: {
             cf_order_id: 'cf_order_12345',
@@ -47,7 +47,7 @@ jest.mock('cashfree-pg', () => {
 
 const axios = require('axios');
 
-jest.spyOn(axios, 'post').mockImplementation((url, data, _config) => {
+jest.spyOn(axios, 'post').mockImplementation((url, data, config) => {
   if (url && url.includes('/orders')) {
     return Promise.resolve({
       data: {
@@ -60,7 +60,7 @@ jest.spyOn(axios, 'post').mockImplementation((url, data, _config) => {
   return Promise.reject(new Error('Unknown POST request: ' + url));
 });
 
-jest.spyOn(axios, 'get').mockImplementation((url, _config) => {
+jest.spyOn(axios, 'get').mockImplementation((url, config) => {
   if (url && url.includes('/payments')) {
     return Promise.resolve({
       data: [
