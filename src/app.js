@@ -23,7 +23,7 @@ const reviewRoutes = require('./modules/review/review.routes');
 const nearbyWorkersRoutes = require('./modules/provider/nearby-workers.routes');
 const chatRoutes = require('./modules/chat/chat.routes');
 const paymentRoutes = require('./modules/payment/payment.routes');
-const { adminRoutes, promoRoutes } = require('./modules/admin');
+const { adminRoutes } = require('./modules/admin');
 
 const app = express();
 
@@ -77,7 +77,6 @@ app.use(`${API_PREFIX}/admin`, adminRoutes);
 
 app.use(`${API_PREFIX}/user/reviews`, reviewRoutes);
 app.use(`${API_PREFIX}/user/nearby-workers`, nearbyWorkersRoutes);
-app.use(`${API_PREFIX}/user/promos`, promoRoutes);
 
 // ── 404 Handler ─────────────────────────────────────────────
 app.use(notFoundHandler);

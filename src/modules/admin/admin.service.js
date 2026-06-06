@@ -7,14 +7,13 @@ const authRepository = require('../auth/auth.repository');
 const providerRepository = require('../provider/provider.repository');
 const serviceRepository = require('../service/service.repository');
 const bookingRepository = require('../booking/booking.repository');
-const { Category, Service } = require('../service/service.model');
+const { Service } = require('../service/service.model');
 const User = require('../auth/auth.model');
 const Provider = require('../provider/provider.model');
 const Booking = require('../booking/booking.model');
 const Payment = require('../payment/payment.model');
 const Review = require('../review/review.model');
 const Setting = require('./setting.model');
-const PromoCode = require('./promo.model');
 const cache = require('../../shared/utils/cache');
 const bookingService = require('../booking/booking.service');
 const logger = require('../../config/logger');
@@ -263,74 +262,6 @@ class AdminService {
         isVerified: p.isVerified
       };
     });
-  }
-
-  // ── PROMO CODE MANAGEMENT ─────────────────────────────────────
-
-  async listPromos(pagination = {}) {
-    const { page = 1, limit = 20, sort = '-createdAt' } = pagination;
-    const skip = (page - 1) * limit;
-
-    const items = await PromoCode.find()
-      .sort(sort)
-      .skip(skip)
-      .limit(limit);
-
-    const total = await PromoCode.countDocuments();
-
-    return { items, total, page, limit };
-  }
-
-  async createPromo(data) {
-    const existing = await PromoCode.findOne({ code: data.code.toUpperCase() });
-    if (existing) {
-      throw AppError.conflict('Promo code with this code already exists.');
-    }
-    return PromoCode.create(data);
-  }
-
-  async updatePromo(id, data) {
-    const promo = await PromoCode.findByIdAndUpdate(
-      id,
-      { $set: data },
-      { new: true, runValidators: true }
-    );
-    if (!promo) {
-      throw AppError.notFound('Promo code not found.');
-    }
-    return promo;
-  }
-
-  async deletePromo(id) {
-    const promo = await PromoCode.findByIdAndDelete(id);
-    if (!promo) {
-      throw AppError.notFound('Promo code not found.');
-    }
-    return { success: true, message: 'Promo code deleted successfully.' };
-  }
-
-  async validatePromo(code, bookingAmount) {
-    if (!code) {
-      throw AppError.badRequest('Promo code is required.');
-    }
-    const promo = await PromoCode.findOne({ code: code.toUpperCase() });
-    if (!promo) {
-      throw AppError.notFound('Promo code is invalid or does not exist.');
-    }
-    
-    const check = promo.isValid(bookingAmount);
-    if (!check.valid) {
-      throw AppError.badRequest(check.reason);
-    }
-    
-    const discount = promo.calculateDiscount(bookingAmount);
-    return {
-      code: promo.code,
-      discountType: promo.discountType,
-      discountValue: promo.discountValue,
-      discountAmount: discount,
-      finalPrice: bookingAmount - discount,
-    };
   }
 
   // ── USER MANAGEMENT ──────────────────────────────────────────

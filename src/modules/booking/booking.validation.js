@@ -38,7 +38,6 @@ const createBookingSchema = {
         .required(),
       address: Joi.string().trim().optional(),
     }).optional(),
-    promoCode: Joi.string().trim().uppercase().optional(),
   }),
 };
 

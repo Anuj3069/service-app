@@ -27,12 +27,6 @@ router.get('/analytics/revenue-trends', adminController.getRevenueTrends);
 router.get('/analytics/popular-services', adminController.getPopularServices);
 router.get('/analytics/provider-leaderboard', adminController.getProviderLeaderboard);
 
-// ── PROMO CODE ROUTES ────────────────────────────────────────
-router.get('/promos', adminController.listPromos);
-router.post('/promos', adminController.createPromo);
-router.patch('/promos/:id', adminController.updatePromo);
-router.delete('/promos/:id', adminController.deletePromo);
-
 // ── USER ROUTES ──────────────────────────────────────────────
 router.get('/users', validate(adminValidation.listUsersSchema), adminController.listUsers);
 router.patch('/users/:id/status', validate(adminValidation.toggleUserStatusSchema), adminController.toggleUserStatus);
