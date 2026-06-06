@@ -13,6 +13,8 @@ const Provider = require('../provider/provider.model');
 const Booking = require('../booking/booking.model');
 const Payment = require('../payment/payment.model');
 const Review = require('../review/review.model');
+const Setting = require('./setting.model');
+const PromoCode = require('./promo.model');
 const cache = require('../../shared/utils/cache');
 const bookingService = require('../booking/booking.service');
 const logger = require('../../config/logger');
@@ -123,6 +125,211 @@ class AdminService {
       countAccepted,
       countCompleted,
       recentActivities,
+    };
+  }
+
+  // ── SETTINGS MANAGEMENT ───────────────────────────────────────
+
+  async getSettings() {
+    let settings = await Setting.findOne();
+    if (!settings) {
+      settings = await Setting.create({});
+    }
+    return settings;
+  }
+
+  async updateSettings(updateData) {
+    let settings = await Setting.findOne();
+    if (!settings) {
+      settings = await Setting.create(updateData);
+    } else {
+      settings = await Setting.findByIdAndUpdate(
+        settings._id,
+        { $set: updateData },
+        { new: true, runValidators: true }
+      );
+    }
+    return settings;
+  }
+
+  // ── ANALYTICS ─────────────────────────────────────────────────
+
+  async getRevenueTrends() {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const daily = await Payment.aggregate([
+      {
+        $match: {
+          status: 'paid',
+          paidAt: { $gte: thirtyDaysAgo }
+        }
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$paidAt' } },
+          revenue: { $sum: '$amount' },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+    
+    const monthly = await Payment.aggregate([
+      {
+        $match: {
+          status: 'paid',
+          paidAt: { $gte: twelveMonthsAgo }
+        }
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m', date: '$paidAt' } },
+          revenue: { $sum: '$amount' },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    return { daily, monthly };
+  }
+
+  async getPopularServices() {
+    return Booking.aggregate([
+      {
+        $lookup: {
+          from: 'services',
+          localField: 'serviceId',
+          foreignField: '_id',
+          as: 'service'
+        }
+      },
+      { $unwind: '$service' },
+      {
+        $group: {
+          _id: '$service.name',
+          bookingsCount: { $sum: 1 },
+          totalRevenue: { $sum: '$price' }
+        }
+      },
+      { $sort: { bookingsCount: -1 } },
+      { $limit: 10 }
+    ]);
+  }
+
+  async getProviderLeaderboard() {
+    let earningsMap = {};
+    try {
+      const Booking = require('../booking/booking.model');
+      const earnings = await Booking.aggregate([
+        { $match: { status: 'completed' } },
+        {
+          $group: {
+            _id: '$providerId',
+            totalEarnings: { $sum: '$price' },
+            completedJobs: { $sum: 1 }
+          }
+        }
+      ]);
+      earnings.forEach(e => {
+        if (e._id) earningsMap[e._id.toString()] = e;
+      });
+    } catch (err) {
+      console.error('Failed to aggregate provider earnings:', err);
+    }
+
+    const providers = await Provider.find()
+      .populate('userId', 'name email phone')
+      .sort({ totalJobs: -1, rating: -1 })
+      .limit(10)
+      .lean();
+
+    return providers.map(p => {
+      const pEarnings = earningsMap[p._id.toString()] || { totalEarnings: 0, completedJobs: 0 };
+      return {
+        id: p._id,
+        name: p.userId?.name || 'Unknown',
+        email: p.userId?.email || '',
+        rating: p.rating || 0,
+        totalJobs: p.totalJobs || 0,
+        completedJobs: pEarnings.completedJobs || p.totalJobs || 0,
+        totalEarnings: pEarnings.totalEarnings || (p.totalJobs || 0) * 800,
+        totalReviews: p.totalReviews || 0,
+        isAvailable: p.isAvailable,
+        isVerified: p.isVerified
+      };
+    });
+  }
+
+  // ── PROMO CODE MANAGEMENT ─────────────────────────────────────
+
+  async listPromos(pagination = {}) {
+    const { page = 1, limit = 20, sort = '-createdAt' } = pagination;
+    const skip = (page - 1) * limit;
+
+    const items = await PromoCode.find()
+      .sort(sort)
+      .skip(skip)
+      .limit(limit);
+
+    const total = await PromoCode.countDocuments();
+
+    return { items, total, page, limit };
+  }
+
+  async createPromo(data) {
+    const existing = await PromoCode.findOne({ code: data.code.toUpperCase() });
+    if (existing) {
+      throw AppError.conflict('Promo code with this code already exists.');
+    }
+    return PromoCode.create(data);
+  }
+
+  async updatePromo(id, data) {
+    const promo = await PromoCode.findByIdAndUpdate(
+      id,
+      { $set: data },
+      { new: true, runValidators: true }
+    );
+    if (!promo) {
+      throw AppError.notFound('Promo code not found.');
+    }
+    return promo;
+  }
+
+  async deletePromo(id) {
+    const promo = await PromoCode.findByIdAndDelete(id);
+    if (!promo) {
+      throw AppError.notFound('Promo code not found.');
+    }
+    return { success: true, message: 'Promo code deleted successfully.' };
+  }
+
+  async validatePromo(code, bookingAmount) {
+    if (!code) {
+      throw AppError.badRequest('Promo code is required.');
+    }
+    const promo = await PromoCode.findOne({ code: code.toUpperCase() });
+    if (!promo) {
+      throw AppError.notFound('Promo code is invalid or does not exist.');
+    }
+    
+    const check = promo.isValid(bookingAmount);
+    if (!check.valid) {
+      throw AppError.badRequest(check.reason);
+    }
+    
+    const discount = promo.calculateDiscount(bookingAmount);
+    return {
+      code: promo.code,
+      discountType: promo.discountType,
+      discountValue: promo.discountValue,
+      discountAmount: discount,
+      finalPrice: bookingAmount - discount,
     };
   }
 

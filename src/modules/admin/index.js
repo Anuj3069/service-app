@@ -4,5 +4,6 @@
 
 const adminRoutes = require('./admin.routes');
 const adminService = require('./admin.service');
+const promoRoutes = require('./promo.routes');
 
-module.exports = { adminRoutes, adminService };
+module.exports = { adminRoutes, adminService, promoRoutes };

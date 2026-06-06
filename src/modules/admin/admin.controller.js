@@ -13,6 +13,67 @@ const getDashboardStats = asyncHandler(async (req, res) => {
   ApiResponse.ok(res, stats, 'Dashboard stats retrieved successfully.');
 });
 
+// ── SETTINGS ──────────────────────────────────────────────────
+
+const getSettings = asyncHandler(async (req, res) => {
+  const settings = await adminService.getSettings();
+  ApiResponse.ok(res, settings, 'Settings retrieved successfully.');
+});
+
+const updateSettings = asyncHandler(async (req, res) => {
+  const settings = await adminService.updateSettings(req.body);
+  ApiResponse.ok(res, settings, 'Settings updated successfully.');
+});
+
+// ── ANALYTICS ─────────────────────────────────────────────────
+
+const getRevenueTrends = asyncHandler(async (req, res) => {
+  const result = await adminService.getRevenueTrends();
+  ApiResponse.ok(res, result, 'Revenue trends retrieved successfully.');
+});
+
+const getPopularServices = asyncHandler(async (req, res) => {
+  const result = await adminService.getPopularServices();
+  ApiResponse.ok(res, result, 'Popular services retrieved successfully.');
+});
+
+const getProviderLeaderboard = asyncHandler(async (req, res) => {
+  const result = await adminService.getProviderLeaderboard();
+  ApiResponse.ok(res, result, 'Provider leaderboard retrieved successfully.');
+});
+
+// ── PROMO CODES ────────────────────────────────────────────────
+
+const listPromos = asyncHandler(async (req, res) => {
+  const { page, limit, sort } = req.query;
+  const pagination = { page: Number(page), limit: Number(limit), sort };
+  const result = await adminService.listPromos(pagination);
+  ApiResponse.ok(res, result, 'Promo codes retrieved successfully.');
+});
+
+const createPromo = asyncHandler(async (req, res) => {
+  const promo = await adminService.createPromo(req.body);
+  ApiResponse.created(res, { promo }, 'Promo code created successfully.');
+});
+
+const updatePromo = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const promo = await adminService.updatePromo(id, req.body);
+  ApiResponse.ok(res, { promo }, 'Promo code updated successfully.');
+});
+
+const deletePromo = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const result = await adminService.deletePromo(id);
+  ApiResponse.ok(res, result, 'Promo code deleted successfully.');
+});
+
+const validatePromo = asyncHandler(async (req, res) => {
+  const { code, bookingAmount } = req.body;
+  const result = await adminService.validatePromo(code, Number(bookingAmount));
+  ApiResponse.ok(res, result, 'Promo code validated successfully.');
+});
+
 // ── USER CONTROLLERS ─────────────────────────────────────────
 
 const listUsers = asyncHandler(async (req, res) => {
@@ -164,6 +225,16 @@ const deleteReview = asyncHandler(async (req, res) => {
 
 module.exports = {
   getDashboardStats,
+  getSettings,
+  updateSettings,
+  getRevenueTrends,
+  getPopularServices,
+  getProviderLeaderboard,
+  listPromos,
+  createPromo,
+  updatePromo,
+  deletePromo,
+  validatePromo,
   listUsers,
   toggleUserStatus,
   updateUserRole,

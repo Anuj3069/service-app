@@ -29,7 +29,16 @@ router.get('/', authenticate, async (req, res, next) => {
 
     const latitude = parseFloat(lat);
     const longitude = parseFloat(lng);
-    const searchRadius = parseFloat(radius) || 10; // default 10 km
+    let searchRadius = parseFloat(radius);
+    if (isNaN(searchRadius)) {
+      try {
+        const Setting = require('../admin/setting.model');
+        const settings = await Setting.findOne();
+        searchRadius = settings ? settings.defaultSearchRadiusKm : 10;
+      } catch (e) {
+        searchRadius = 10;
+      }
+    }
 
     if (isNaN(latitude) || isNaN(longitude)) {
       throw AppError.badRequest('lat and lng must be valid numbers');

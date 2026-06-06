@@ -151,6 +151,22 @@ const bookingSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    originalPrice: {
+      type: Number,
+      default: null,
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+    },
+    promoCode: {
+      type: String,
+      default: null,
+    },
+    payout: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

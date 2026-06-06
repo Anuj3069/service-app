@@ -35,7 +35,7 @@ class BookingService {
    * Create a new booking
    * CRITICAL: Rechecks provider availability before creating
    */
-  async createBooking(userId, { providerId, serviceId, date, slot, price, customerLocation }) {
+  async createBooking(userId, { providerId, serviceId, date, slot, price, customerLocation, promoCode }) {
     // 1. Validate service exists
     const service = await Service.findById(serviceId);
     if (!service || !service.isActive) {
@@ -60,9 +60,48 @@ class BookingService {
       );
     }
 
-    // 4. Calculate expiry time
+    // 3.5. Apply promo code if provided
+    let finalPrice = price;
+    let originalPrice = price;
+    let discountAmount = 0;
+    let promoObj = null;
+
+    if (promoCode) {
+      const PromoCode = require('../admin/promo.model');
+      promoObj = await PromoCode.findOne({ code: promoCode.toUpperCase() });
+      if (!promoObj) {
+        throw AppError.notFound('Promo code is invalid or does not exist.');
+      }
+      const check = promoObj.isValid(price);
+      if (!check.valid) {
+        throw AppError.badRequest(check.reason);
+      }
+      discountAmount = promoObj.calculateDiscount(price);
+      finalPrice = price - discountAmount;
+    }
+
+    // 4. Calculate expiry time & commission rate
+    let expiryMinutes = config.booking.expiryMinutes;
+    let commissionRate = 10; // Default 10%
+    try {
+      const Setting = require('../admin/setting.model');
+      const settings = await Setting.findOne();
+      if (settings) {
+        if (settings.bookingExpiryMinutes) {
+          expiryMinutes = settings.bookingExpiryMinutes;
+        }
+        if (settings.commissionRate !== undefined) {
+          commissionRate = settings.commissionRate;
+        }
+      }
+    } catch (e) {
+      logger.error('Failed to load settings during booking creation:', e);
+    }
     const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + config.booking.expiryMinutes);
+    expiresAt.setMinutes(expiresAt.getMinutes() + expiryMinutes);
+
+    // Calculate worker payout (platform absorbs promo discount, so payout is based on originalPrice)
+    const payout = originalPrice * (1 - commissionRate / 100);
 
     // 5. Create booking
     const booking = await bookingRepository.create({
@@ -71,7 +110,11 @@ class BookingService {
       serviceId,
       date: new Date(date),
       slot,
-      price,
+      price: finalPrice,
+      originalPrice,
+      discountAmount,
+      promoCode: promoObj ? promoObj.code : null,
+      payout,
       status: BOOKING_STATUS.PENDING,
       expiresAt,
       customerLocation: customerLocation ? {
@@ -80,6 +123,11 @@ class BookingService {
         address: customerLocation.address || '',
       } : undefined
     });
+
+    if (promoObj) {
+      promoObj.usageCount += 1;
+      await promoObj.save();
+    }
 
     logger.info(`📝 Booking created: ${booking._id} | User: ${userId} | Provider: ${providerId} | Expires: ${expiresAt}`);
 
@@ -102,10 +150,20 @@ class BookingService {
     let availableProviders;
     const activeLocation = customerLocation || location;
     if (activeLocation && activeLocation.coordinates) {
+      let searchRadius = service.searchRadiusKm;
+      try {
+        const Setting = require('../admin/setting.model');
+        const settings = await Setting.findOne();
+        if (settings && settings.defaultSearchRadiusKm) {
+          searchRadius = service.searchRadiusKm || settings.defaultSearchRadiusKm;
+        }
+      } catch (e) {
+        logger.error('Failed to load settings defaultSearchRadiusKm:', e);
+      }
       availableProviders = await providerRepository.findNearbyBySkills(
         service.requiredSkills,
         activeLocation.coordinates,
-        service.searchRadiusKm
+        searchRadius
       );
     } else {
       availableProviders = await providerRepository.findAvailableBySkills(service.requiredSkills);
@@ -136,7 +194,19 @@ class BookingService {
       }
     }
 
-    // 3. Create booking
+    // 3. Calculate commission rate and worker payout
+    let commissionRate = 10; // Default 10%
+    try {
+      const Setting = require('../admin/setting.model');
+      const settings = await Setting.findOne();
+      if (settings && settings.commissionRate !== undefined) {
+        commissionRate = settings.commissionRate;
+      }
+    } catch (e) {
+      logger.error('Failed to load settings during instant booking creation:', e);
+    }
+    const payout = price * (1 - commissionRate / 100);
+
     const requestedAt = new Date();
     const expiresAt = new Date(requestedAt.getTime() + 60000); // 60 seconds from now
 
@@ -146,6 +216,8 @@ class BookingService {
       candidateProviders,
       type: 'INSTANT',
       price,
+      originalPrice: price,
+      payout,
       status: BOOKING_STATUS.REQUESTED,
       requestedAt,
       expiresAt,
