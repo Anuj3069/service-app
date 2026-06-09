@@ -23,6 +23,7 @@ router.patch('/users/:id/role', validate(adminValidation.updateUserRoleSchema), 
 // ── PROVIDER ROUTES ──────────────────────────────────────────
 router.get('/providers', validate(adminValidation.listProvidersSchema), adminController.listProviders);
 router.patch('/providers/:id/verify', validate(adminValidation.verifyProviderSchema), adminController.verifyProvider);
+router.patch('/providers/:id/kyc', validate(adminValidation.reviewKycSchema), adminController.reviewKyc);
 router.patch('/providers/:id/profile', validate(adminValidation.updateProviderSchema), adminController.updateProvider);
 
 // ── CATALOG ROUTES ───────────────────────────────────────────

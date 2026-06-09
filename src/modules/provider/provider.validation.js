@@ -78,4 +78,16 @@ const updateLocationSchema = {
   }),
 };
 
-module.exports = { createProfileSchema, updateProfileSchema, updateLocationSchema };
+const submitKycSchema = {
+  body: Joi.object({
+    documentType: Joi.string()
+      .valid('aadhaar', 'pan', 'passport', 'driving_license')
+      .required()
+      .messages({
+        'any.only': 'Document type must be one of: aadhaar, pan, passport, driving_license',
+        'any.required': 'Document type is required',
+      }),
+  }),
+};
+
+module.exports = { createProfileSchema, updateProfileSchema, updateLocationSchema, submitKycSchema };

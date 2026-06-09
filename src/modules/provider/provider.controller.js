@@ -3,6 +3,7 @@
  */
 
 const asyncHandler = require('../../shared/middleware/async-handler');
+const AppError = require('../../shared/utils/api-error');
 const ApiResponse = require('../../shared/utils/api-response');
 const providerService = require('./provider.service');
 
@@ -42,4 +43,15 @@ const updateLocation = asyncHandler(async (req, res) => {
   ApiResponse.ok(res, { provider }, 'Location updated successfully.');
 });
 
-module.exports = { createProfile, getProfile, updateProfile, updateLocation };
+const submitKyc = asyncHandler(async (req, res) => {
+  const { documentType } = req.body;
+  const file = req.file; // Multer adds file object
+  if (!file) {
+    throw AppError.badRequest('KYC document file is required');
+  }
+  const documentUrl = file.cloudinaryUrl; // Set by cloudinaryUploadMiddleware
+  const provider = await providerService.submitKyc(req.user.id, documentType, documentUrl);
+  ApiResponse.ok(res, { provider }, 'KYC document submitted successfully and is pending verification.');
+});
+
+module.exports = { createProfile, getProfile, updateProfile, updateLocation, submitKyc };

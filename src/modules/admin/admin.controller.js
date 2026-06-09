@@ -155,6 +155,13 @@ const deleteReview = asyncHandler(async (req, res) => {
   ApiResponse.ok(res, result, 'Review deleted and provider rating adjusted.');
 });
 
+const reviewKyc = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { action, rejectionReason } = req.body;
+  const provider = await adminService.reviewKyc(id, action, rejectionReason);
+  ApiResponse.ok(res, { provider }, `KYC ${action}d successfully.`);
+});
+
 module.exports = {
   listUsers,
   toggleUserStatus,
@@ -175,4 +182,5 @@ module.exports = {
   overridePaymentStatus,
   listReviews,
   deleteReview,
+  reviewKyc,
 };
