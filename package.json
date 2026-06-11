@@ -28,6 +28,7 @@
     "@socket.io/redis-adapter": "^8.3.0",
     "bcryptjs": "^2.4.3",
     "cashfree-pg": "^5.1.0",
+    "cloudinary": "^2.10.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
@@ -41,6 +42,7 @@
     "multer": "^2.1.1",
     "rate-limiter-flexible": "^11.0.1",
     "socket.io": "^4.8.3",
+    "streamifier": "^0.1.1",
     "winston": "^3.17.0"
   },
   "devDependencies": {
