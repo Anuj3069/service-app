@@ -167,6 +167,25 @@ const overridePaymentSchema = {
   }),
 };
 
+const reviewKycSchema = {
+  params: Joi.object({
+    id: objectId.required(),
+  }),
+  body: Joi.object({
+    action: Joi.string().valid('approve', 'reject').required().messages({
+      'any.required': 'action (approve or reject) is required',
+      'any.only': 'action must be either approve or reject',
+    }),
+    rejectionReason: Joi.string().trim().when('action', {
+      is: 'reject',
+      then: Joi.required(),
+      otherwise: Joi.optional()
+    }).messages({
+      'any.required': 'rejectionReason is required when action is reject',
+    }),
+  }),
+};
+
 module.exports = {
   listUsersSchema,
   toggleUserStatusSchema,
@@ -182,4 +201,5 @@ module.exports = {
   cancelBookingSchema,
   listPaymentsSchema,
   overridePaymentSchema,
+  reviewKycSchema,
 };

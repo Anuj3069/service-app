@@ -78,6 +78,31 @@ const providerSchema = new mongoose.Schema(
       type: Boolean,
       default: true, // Online/offline toggle
     },
+    kyc: {
+      documentType: {
+        type: String,
+        enum: ['aadhaar', 'pan', 'passport', 'driving_license'],
+      },
+      documentUrl: {
+        type: String,
+      },
+      status: {
+        type: String,
+        enum: ['not_submitted', 'pending', 'approved', 'rejected'],
+        default: 'not_submitted',
+        index: true,
+      },
+      rejectionReason: {
+        type: String,
+        trim: true,
+      },
+      submittedAt: {
+        type: Date,
+      },
+      reviewedAt: {
+        type: Date,
+      },
+    },
   },
   {
     timestamps: true,

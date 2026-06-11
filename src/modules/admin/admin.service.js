@@ -365,7 +365,33 @@ class AdminService {
     return service;
   }
 
-  // ── BOOKING MANAGEMENT ───────────────────────────────────────
+  /**
+   * Review KYC document for a provider (approve or reject)
+   * @param {string} providerId - Provider's user ID
+   * @param {string} action - 'approve' or 'reject'
+   * @param {string} [rejectionReason] - Reason for rejection if action is 'reject'
+   */
+   async reviewKyc(providerId, action, rejectionReason) {
+     const provider = await providerRepository.findByUserId(providerId);
+     if (!provider) {
+       throw AppError.notFound('Provider not found');
+     }
+
+     if (!provider.kyc || provider.kyc.status !== 'pending') {
+       throw AppError.badRequest('No pending KYC submission found for this provider.');
+     }
+
+     const update = {
+       'kyc.status': action === 'approve' ? 'approved' : 'rejected',
+       'kyc.reviewedAt': new Date(),
+     };
+     if (action === 'reject') {
+       update['kyc.rejectionReason'] = rejectionReason || '';
+     }
+     const updated = await providerRepository.updateByUserId(providerId, update);
+     // TODO: trigger email notification to provider about verification result
+     return updated;
+   }
 
   async listBookings(filters, pagination) {
     const { page = 1, limit = 20, sort = '-createdAt' } = pagination;

@@ -47,6 +47,29 @@ class ProviderService {
   }
 
   /**
+   * Submit KYC document for provider verification
+   * @param {string} userId - provider's user id
+   * @param {string} documentType - type of KYC document (aadhaar, pan, passport, driving_license)
+   * @param {string} documentUrl - path to uploaded document file
+   */
+  async submitKyc(userId, documentType, documentUrl) {
+    const provider = await providerRepository.findByUserId(userId);
+    if (!provider) {
+      throw AppError.notFound('Provider profile not found.');
+    }
+    const updateData = {
+      kyc: {
+        documentType,
+        documentUrl,
+        status: 'pending',
+        submittedAt: new Date(),
+      },
+    };
+    const updated = await providerRepository.updateByUserId(userId, updateData);
+    return updated;
+  }
+
+  /**
    * Update worker's current GPS location
    */
   async updateLocation(userId, { coordinates, address }) {
@@ -57,11 +80,9 @@ class ProviderService {
         address: address || undefined,
       },
     });
-
     if (!provider) {
       throw AppError.notFound('Provider profile not found.');
     }
-
     return provider;
   }
 }

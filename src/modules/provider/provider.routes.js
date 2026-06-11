@@ -8,7 +8,10 @@
 
 const { Router } = require('express');
 const { authenticate, authorize } = require('../../shared/middleware/auth.middleware');
+const { uploadKyc, cloudinaryUploadMiddleware } = require('../../shared/middleware/upload.middleware');
 const validate = require('../../shared/middleware/validate.middleware');
+const { submitKycSchema } = require('./provider.validation');
+const { submitKyc } = require('./provider.controller');
 const { createProfileSchema, updateProfileSchema, updateLocationSchema } = require('./provider.validation');
 const { createProfile, getProfile, updateProfile, updateLocation } = require('./provider.controller');
 const { ROLES } = require('../../shared/utils/constants');
@@ -22,5 +25,7 @@ router.post('/', validate(createProfileSchema), createProfile);
 router.get('/', getProfile);
 router.put('/', validate(updateProfileSchema), updateProfile);
 router.put('/location', validate(updateLocationSchema), updateLocation);
+
+router.post('/kyc', uploadKyc.single('document'), cloudinaryUploadMiddleware, validate(submitKycSchema), submitKyc);
 
 module.exports = router;
