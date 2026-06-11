@@ -384,6 +384,7 @@ class AdminService {
      const update = {
        'kyc.status': action === 'approve' ? 'approved' : 'rejected',
        'kyc.reviewedAt': new Date(),
+       isVerified: action === 'approve',
      };
      if (action === 'reject') {
        update['kyc.rejectionReason'] = rejectionReason || '';
