@@ -3,7 +3,7 @@
  */
 
 const Joi = require('joi');
-const { ROLES } = require('../../shared/utils/constants');
+const { ROLES, SETTLEMENT_STATUS } = require('../../shared/utils/constants');
 const { objectId, paginationQuery } = require('../../shared/validators/common.validators');
 
 const listUsersSchema = {
@@ -186,6 +186,35 @@ const reviewKycSchema = {
   }),
 };
 
+const listSettlementsSchema = {
+  query: paginationQuery.keys({
+    status: Joi.string()
+      .valid(...Object.values(SETTLEMENT_STATUS))
+      .optional(),
+    providerId: objectId.optional(),
+  }),
+};
+
+const updateSettlementStatusSchema = {
+  params: Joi.object({
+    id: objectId.required(),
+  }),
+  body: Joi.object({
+    status: Joi.string()
+      .valid(
+        SETTLEMENT_STATUS.PROCESSING,
+        SETTLEMENT_STATUS.SETTLED,
+        SETTLEMENT_STATUS.REJECTED
+      )
+      .required()
+      .messages({
+        'any.required': 'status is required',
+        'any.only': 'status must be one of: processing, settled, rejected',
+      }),
+    adminNote: Joi.string().trim().optional(),
+  }),
+};
+
 module.exports = {
   listUsersSchema,
   toggleUserStatusSchema,
@@ -202,4 +231,6 @@ module.exports = {
   listPaymentsSchema,
   overridePaymentSchema,
   reviewKycSchema,
+  listSettlementsSchema,
+  updateSettlementStatusSchema,
 };

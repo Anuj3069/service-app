@@ -24,6 +24,7 @@ const nearbyWorkersRoutes = require('./modules/provider/nearby-workers.routes');
 const chatRoutes = require('./modules/chat/chat.routes');
 const paymentRoutes = require('./modules/payment/payment.routes');
 const { adminRoutes } = require('./modules/admin');
+const settlementWorkerRoutes = require('./modules/settlement/settlement.worker.routes');
 
 const app = express();
 
@@ -74,6 +75,7 @@ app.use(`${API_PREFIX}`, bookingRoutes);
 app.use(`${API_PREFIX}`, chatRoutes);
 app.use(`${API_PREFIX}/payments`, paymentRoutes);
 app.use(`${API_PREFIX}/admin`, adminRoutes);
+app.use(`${API_PREFIX}/worker/settlement`, settlementWorkerRoutes);
 
 app.use(`${API_PREFIX}/user/reviews`, reviewRoutes);
 app.use(`${API_PREFIX}/user/nearby-workers`, nearbyWorkersRoutes);

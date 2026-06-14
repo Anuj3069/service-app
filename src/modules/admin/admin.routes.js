@@ -60,4 +60,9 @@ router.patch('/payments/:id/status', validate(adminValidation.overridePaymentSch
 router.get('/reviews', adminController.listReviews);
 router.delete('/reviews/:id', validate(idParam), adminController.deleteReview);
 
+// ── SETTLEMENT ROUTES ─────────────────────────────────────────
+router.get('/settlements',     validate(adminValidation.listSettlementsSchema),         adminController.listSettlements);
+router.get('/settlements/:id', validate(idParam),                                       adminController.getSettlementById);
+router.patch('/settlements/:id/status', validate(adminValidation.updateSettlementStatusSchema), adminController.updateSettlementStatus);
+
 module.exports = router;

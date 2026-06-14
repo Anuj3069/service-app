@@ -7,6 +7,7 @@ const authRepository = require('../auth/auth.repository');
 const providerRepository = require('../provider/provider.repository');
 const serviceRepository = require('../service/service.repository');
 const bookingRepository = require('../booking/booking.repository');
+const settlementRepository = require('../settlement/settlement.repository');
 const { Service } = require('../service/service.model');
 const User = require('../auth/auth.model');
 const Provider = require('../provider/provider.model');
@@ -533,6 +534,63 @@ class AdminService {
     logger.info(`🗑️ Review ${reviewId} deleted by Admin. Provider ${review.providerId} rating recalculated.`);
 
     return { success: true, message: 'Review deleted and provider rating updated.' };
+  }
+
+  // ── SETTLEMENT MANAGEMENT ────────────────────────────────────────────
+
+  /**
+   * List all settlements with optional status / providerId filter
+   */
+  async listSettlements(filters, pagination) {
+    return settlementRepository.findAll(filters, pagination);
+  }
+
+  /**
+   * Get a single settlement by ID (admin view)
+   */
+  async getSettlementById(id) {
+    const settlement = await settlementRepository.findById(id);
+    if (!settlement) {
+      throw AppError.notFound('Settlement not found.');
+    }
+    return settlement;
+  }
+
+  /**
+   * Advance a settlement through the status lifecycle
+   *
+   * Allowed transitions:
+   *   pending    → processing | rejected
+   *   processing → settled   | rejected
+   *   settled    → (terminal)
+   *   rejected   → (terminal)
+   */
+  async updateSettlementStatus(id, status, adminNote) {
+    const settlement = await settlementRepository.findById(id);
+    if (!settlement) {
+      throw AppError.notFound('Settlement not found.');
+    }
+
+    const allowed = {
+      pending:    ['processing', 'rejected'],
+      processing: ['settled', 'rejected'],
+      settled:    [],
+      rejected:   [],
+    };
+
+    if (!allowed[settlement.status].includes(status)) {
+      throw AppError.badRequest(
+        `Cannot transition settlement from '${settlement.status}' to '${status}'.`
+      );
+    }
+
+    const update = { status };
+    if (adminNote) update.adminNote = adminNote;
+    if (status === 'settled') update.settledAt = new Date();
+
+    const updated = await settlementRepository.updateById(id, update);
+    logger.info(`💸 Settlement ${id} moved to '${status}' by Admin. Note: ${adminNote || '(none)'}`);
+    return updated;
   }
 }
 

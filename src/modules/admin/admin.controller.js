@@ -198,6 +198,28 @@ const reviewKyc = asyncHandler(async (req, res) => {
   ApiResponse.ok(res, { provider }, `KYC ${action}d successfully.`);
 });
 
+// ── SETTLEMENT CONTROLLERS ──────────────────────────────────────────
+
+const listSettlements = asyncHandler(async (req, res) => {
+  const { page, limit, sort, status, providerId } = req.query;
+  const result = await adminService.listSettlements(
+    { status, providerId },
+    { page: Number(page) || 1, limit: Number(limit) || 20, sort }
+  );
+  ApiResponse.ok(res, result, 'Settlements retrieved successfully.');
+});
+
+const getSettlementById = asyncHandler(async (req, res) => {
+  const settlement = await adminService.getSettlementById(req.params.id);
+  ApiResponse.ok(res, { settlement }, 'Settlement retrieved successfully.');
+});
+
+const updateSettlementStatus = asyncHandler(async (req, res) => {
+  const { status, adminNote } = req.body;
+  const settlement = await adminService.updateSettlementStatus(req.params.id, status, adminNote);
+  ApiResponse.ok(res, { settlement }, `Settlement status updated to '${status}'.`);
+});
+
 module.exports = {
   getDashboardStats,
   getSettings,
@@ -225,4 +247,7 @@ module.exports = {
   listReviews,
   deleteReview,
   reviewKyc,
+  listSettlements,
+  getSettlementById,
+  updateSettlementStatus,
 };

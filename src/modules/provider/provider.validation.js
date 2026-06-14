@@ -90,4 +90,36 @@ const submitKycSchema = {
   }),
 };
 
-module.exports = { createProfileSchema, updateProfileSchema, updateLocationSchema, submitKycSchema };
+const updateBankDetailsSchema = {
+  body: Joi.object({
+    accountHolderName: Joi.string().trim().required().messages({
+      'any.required': 'Account holder name is required',
+    }),
+    accountNumber: Joi.string()
+      .pattern(/^\d{9,18}$/)
+      .required()
+      .messages({
+        'any.required': 'Account number is required',
+        'string.pattern.base': 'Account number must be 9–18 digits',
+      }),
+    ifscCode: Joi.string()
+      .pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/)
+      .required()
+      .messages({
+        'any.required': 'IFSC code is required',
+        'string.pattern.base': 'Invalid IFSC code format (e.g. HDFC0001234)',
+      }),
+    bankName: Joi.string().trim().required().messages({
+      'any.required': 'Bank name is required',
+    }),
+    upiId: Joi.string().trim().optional(),
+  }),
+};
+
+module.exports = {
+  createProfileSchema,
+  updateProfileSchema,
+  updateLocationSchema,
+  submitKycSchema,
+  updateBankDetailsSchema,
+};

@@ -70,7 +70,7 @@ class ProviderService {
   }
 
   /**
-   * Update worker's current GPS location
+   * Update worker's GPS location
    */
   async updateLocation(userId, { coordinates, address }) {
     const provider = await providerRepository.updateByUserId(userId, {
@@ -79,6 +79,19 @@ class ProviderService {
         coordinates, // [longitude, latitude]
         address: address || undefined,
       },
+    });
+    if (!provider) {
+      throw AppError.notFound('Provider profile not found.');
+    }
+    return provider;
+  }
+
+  /**
+   * Save / update bank details for settlement payouts
+   */
+  async updateBankDetails(userId, bankData) {
+    const provider = await providerRepository.updateByUserId(userId, {
+      bankDetails: { ...bankData, submittedAt: new Date() },
     });
     if (!provider) {
       throw AppError.notFound('Provider profile not found.');

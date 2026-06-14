@@ -103,6 +103,14 @@ const providerSchema = new mongoose.Schema(
         type: Date,
       },
     },
+    bankDetails: {
+      accountHolderName: { type: String, trim: true },
+      accountNumber:     { type: String, trim: true },
+      ifscCode:          { type: String, trim: true, uppercase: true },
+      bankName:          { type: String, trim: true },
+      upiId:             { type: String, trim: true },
+      submittedAt:       { type: Date },
+    },
   },
   {
     timestamps: true,

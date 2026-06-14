@@ -52,9 +52,17 @@ const BOOKING_TRANSITIONS = Object.freeze({
   [BOOKING_STATUS.EXPIRED]: [],
 });
 
+const SETTLEMENT_STATUS = Object.freeze({
+  PENDING:    'pending',
+  PROCESSING: 'processing',
+  SETTLED:    'settled',
+  REJECTED:   'rejected',
+});
+
 module.exports = {
   ROLES,
   BOOKING_STATUS,
   BOOKING_TRANSITIONS,
   DAYS_OF_WEEK,
+  SETTLEMENT_STATUS,
 };

@@ -54,4 +54,30 @@ const submitKyc = asyncHandler(async (req, res) => {
   ApiResponse.ok(res, { provider }, 'KYC document submitted successfully and is pending verification.');
 });
 
-module.exports = { createProfile, getProfile, updateProfile, updateLocation, submitKyc };
+/**
+ * GET /api/v1/worker/profile/bank-details
+ * Get own bank details
+ */
+const getBankDetails = asyncHandler(async (req, res) => {
+  const provider = await providerService.getProfile(req.user.id);
+  ApiResponse.ok(res, { bankDetails: provider.bankDetails ?? null }, 'Bank details retrieved.');
+});
+
+/**
+ * PUT /api/v1/worker/profile/bank-details
+ * Save / update bank details for payouts
+ */
+const updateBankDetails = asyncHandler(async (req, res) => {
+  const provider = await providerService.updateBankDetails(req.user.id, req.body);
+  ApiResponse.ok(res, { bankDetails: provider.bankDetails }, 'Bank details saved successfully.');
+});
+
+module.exports = {
+  createProfile,
+  getProfile,
+  updateProfile,
+  updateLocation,
+  submitKyc,
+  getBankDetails,
+  updateBankDetails,
+};
