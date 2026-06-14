@@ -80,6 +80,15 @@ const bookingActionSchema = {
   }),
 };
 
+const cancelBookingSchema = {
+  params: Joi.object({
+    id: objectId.required(),
+  }),
+  body: Joi.object({
+    cancellationReason: Joi.string().trim().max(300).optional(),
+  }),
+};
+
 const completeBookingSchema = {
   params: Joi.object({
     id: objectId.required(),
@@ -107,6 +116,7 @@ module.exports = {
   createInstantBookingSchema,
   getBookingByIdSchema,
   bookingActionSchema,
+  cancelBookingSchema,
   completeBookingSchema,
   listBookingsSchema,
 };

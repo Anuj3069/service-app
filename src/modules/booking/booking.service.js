@@ -252,6 +252,67 @@ class BookingService {
   // ─────────────────────────────────────────────────────────
 
   /**
+   * Cancel a customer's booking before it has been accepted.
+   */
+  async cancelUserBooking(userId, bookingId, cancellationReason) {
+    const booking = await bookingRepository.findById(bookingId);
+    if (!booking) {
+      throw AppError.notFound('Booking not found.');
+    }
+
+    if (booking.userId._id.toString() !== userId.toString()) {
+      throw AppError.forbidden('You do not have access to this booking.');
+    }
+
+    const cancellableStatuses = [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.PENDING];
+    if (!cancellableStatuses.includes(booking.status)) {
+      throw AppError.badRequest(`Cannot cancel booking with status '${booking.status}'.`);
+    }
+
+    if (booking.expiresAt && new Date() > booking.expiresAt) {
+      await bookingRepository.updateById(bookingId, { status: BOOKING_STATUS.EXPIRED });
+      throw AppError.gone('This booking request has already expired.');
+    }
+
+    this._validateTransition(booking.status, BOOKING_STATUS.CANCELLED);
+
+    const BookingModel = require('./booking.model');
+    const updated = await BookingModel.findOneAndUpdate(
+      {
+        _id: bookingId,
+        userId,
+        status: { $in: cancellableStatuses },
+      },
+      {
+        status: BOOKING_STATUS.CANCELLED,
+        cancelledAt: new Date(),
+        cancellationReason: cancellationReason || 'Cancelled by customer',
+        expiresAt: null,
+      },
+      { new: true, runValidators: true }
+    )
+      .populate('userId', 'name email phone')
+      .populate('serviceId', 'name basePrice duration')
+      .populate({
+        path: 'providerId',
+        select: 'userId skills rating',
+        populate: { path: 'userId', select: 'name email phone' },
+      })
+      .populate({
+        path: 'candidateProviders',
+        select: 'userId rating',
+        populate: { path: 'userId', select: 'name' },
+      });
+
+    if (!updated) {
+      throw AppError.gone('This booking can no longer be cancelled.');
+    }
+
+    logger.info(`Booking cancelled by customer: ${bookingId} | User: ${userId}`);
+    return updated;
+  }
+
+  /**
    * Get bookings assigned to a worker (including instant booking candidates)
    */
   async getWorkerBookings(providerId, status) {

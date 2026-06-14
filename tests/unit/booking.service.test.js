@@ -146,6 +146,26 @@ describe('BookingService', () => {
       expect(result.status).toBe('rejected');
     });
 
+    it('PENDING -> CANCELLED by customer (valid)', async () => {
+      const result = await bookingService.cancelUserBooking(
+        customer._id,
+        bookingId,
+        'Plans changed'
+      );
+
+      expect(result.status).toBe('cancelled');
+      expect(result.cancelledAt).toBeDefined();
+      expect(result.cancellationReason).toBe('Plans changed');
+    });
+
+    it('ACCEPTED -> CANCELLED by customer (invalid)', async () => {
+      await bookingService.acceptBooking(provider._id, bookingId);
+
+      await expect(
+        bookingService.cancelUserBooking(customer._id, bookingId)
+      ).rejects.toThrow("Cannot cancel booking with status 'accepted'");
+    });
+
     it('ACCEPTED → COMPLETED (valid)', async () => {
       await bookingService.acceptBooking(provider._id, bookingId);
       const bookingFromDb = await Booking.findById(bookingId).select('+completionOtp');
@@ -178,6 +198,34 @@ describe('BookingService', () => {
       await expect(
         bookingService.acceptBooking(provider._id, bookingId)
       ).rejects.toThrow('Cannot transition');
+    });
+  });
+
+  describe('instant booking cancellation', () => {
+    it('REQUESTED -> CANCELLED by customer (valid)', async () => {
+      const expiresAt = new Date(Date.now() + 300000);
+
+      const booking = await Booking.create({
+        userId: customer._id,
+        serviceId: service._id,
+        candidateProviders: [provider._id],
+        type: 'INSTANT',
+        price: 1500,
+        status: 'requested',
+        requestedAt: new Date(),
+        expiresAt,
+      });
+
+      const result = await bookingService.cancelUserBooking(
+        customer._id,
+        booking._id,
+        'No longer needed'
+      );
+
+      expect(result.status).toBe('cancelled');
+      expect(result.cancelledAt).toBeDefined();
+      expect(result.expiresAt).toBeNull();
+      expect(result.cancellationReason).toBe('No longer needed');
     });
   });
 

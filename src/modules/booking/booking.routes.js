@@ -22,6 +22,7 @@ const {
   createInstantBookingSchema,
   getBookingByIdSchema,
   bookingActionSchema,
+  cancelBookingSchema,
   completeBookingSchema,
   listBookingsSchema,
 } = require('./booking.validation');
@@ -30,6 +31,7 @@ const {
   createInstantBooking,
   getUserBookings,
   getBookingById,
+  cancelUserBooking,
   getWorkerBookings,
   acceptBooking,
   rejectBooking,
@@ -72,6 +74,14 @@ router.get(
   authorize(ROLES.CUSTOMER),
   validate(getBookingByIdSchema),
   getBookingById
+);
+
+router.put(
+  '/user/bookings/:id/cancel',
+  authenticate,
+  authorize(ROLES.CUSTOMER),
+  validate(cancelBookingSchema),
+  cancelUserBooking
 );
 
 // Customer fetches OTP for their accepted booking

@@ -105,6 +105,59 @@ const getBookingById = asyncHandler(async (req, res) => {
 });
 
 /**
+ * PUT /api/v1/user/bookings/:id/cancel
+ * Cancel a requested or pending booking
+ */
+const cancelUserBooking = asyncHandler(async (req, res) => {
+  const booking = await bookingService.cancelUserBooking(
+    req.user.id,
+    req.params.id,
+    req.body.cancellationReason
+  );
+
+  await expiryScheduler.cancel(req.params.id);
+
+  const io = req.app.get('io');
+  const socketStore = req.app.get('socketStore');
+  if (io && socketStore) {
+    const providerUserIds = [];
+
+    if (booking.providerId && booking.providerId.userId) {
+      providerUserIds.push(
+        booking.providerId.userId._id
+          ? booking.providerId.userId._id.toString()
+          : booking.providerId.userId.toString()
+      );
+    }
+
+    if (Array.isArray(booking.candidateProviders)) {
+      for (const provider of booking.candidateProviders) {
+        if (provider.userId) {
+          providerUserIds.push(
+            provider.userId._id
+              ? provider.userId._id.toString()
+              : provider.userId.toString()
+          );
+        }
+      }
+    }
+
+    for (const providerUserId of [...new Set(providerUserIds)]) {
+      const socketId = await socketStore.get(providerUserId);
+      if (socketId) {
+        io.to(socketId).emit('booking-cancelled', {
+          bookingId: booking._id,
+          status: 'CANCELLED',
+          message: 'The customer cancelled this booking request.',
+        });
+      }
+    }
+  }
+
+  ApiResponse.ok(res, { booking }, 'Booking cancelled successfully.');
+});
+
+/**
  * POST /api/v1/user/bookings/:id/pay
  * Initiate payment for a completed booking
  */
@@ -288,6 +341,7 @@ module.exports = {
   createInstantBooking,
   getUserBookings,
   getBookingById,
+  cancelUserBooking,
   getCompletionOtp,
   payBooking,
   payBookingByCash,
