@@ -64,6 +64,12 @@ const config = {
     clientSecret: process.env.CASHFREE_CLIENT_SECRET || null,
     env: process.env.CASHFREE_ENV || 'TEST',
   },
+
+  // SendGrid
+  sendgrid: {
+    apiKey: process.env.SENDGRID_API_KEY || null,
+    fromEmail: process.env.SENDGRID_FROM_EMAIL || null,
+  },
 };
 
 // ── Validation ──────────────────────────────────────────────
@@ -88,5 +94,6 @@ Object.freeze(config.jwt);
 Object.freeze(config.booking);
 Object.freeze(config.redis);
 Object.freeze(config.cashfree);
+Object.freeze(config.sendgrid);
 
 module.exports = config;

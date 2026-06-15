@@ -8,8 +8,8 @@
 
 const { Router } = require('express');
 const validate = require('../../shared/middleware/validate.middleware');
-const { registerSchema, loginSchema } = require('./auth.validation');
-const { register, login, logout, refreshToken } = require('./auth.controller');
+const { registerSchema, loginSchema, sendOtpSchema, verifyOtpSchema, forgotPasswordSchema, resetPasswordSchema } = require('./auth.validation');
+const { register, login, logout, refreshToken, sendOtp, verifyOtp, forgotPassword, resetPassword } = require('./auth.controller');
 const { authenticate } = require('../../shared/middleware/auth.middleware');
 const { authLimiter, rateLimitMiddleware } = require('../../shared/middleware/rate-limiter');
 
@@ -17,6 +17,10 @@ const router = Router();
 
 router.post('/register', rateLimitMiddleware(authLimiter), validate(registerSchema), register);
 router.post('/login', rateLimitMiddleware(authLimiter), validate(loginSchema), login);
+router.post('/otp/send', rateLimitMiddleware(authLimiter), validate(sendOtpSchema), sendOtp);
+router.post('/otp/verify', rateLimitMiddleware(authLimiter), validate(verifyOtpSchema), verifyOtp);
+router.post('/forgot-password', rateLimitMiddleware(authLimiter), validate(forgotPasswordSchema), forgotPassword);
+router.post('/reset-password', rateLimitMiddleware(authLimiter), validate(resetPasswordSchema), resetPassword);
 router.post('/logout', authenticate, logout);
 router.post('/refresh-token', refreshToken);
 
