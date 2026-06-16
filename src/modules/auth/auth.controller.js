@@ -36,6 +36,26 @@ const login = asyncHandler(async (req, res) => {
 });
 
 /**
+ * POST /api/v1/auth/otp/send
+ * Request OTP for customer email
+ */
+const sendOtp = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  const result = await authService.sendOtp(email);
+  ApiResponse.ok(res, result, 'OTP sent successfully.');
+});
+
+/**
+ * POST /api/v1/auth/otp/verify
+ * Verify OTP and log in customer
+ */
+const verifyOtp = asyncHandler(async (req, res) => {
+  const { email, otp } = req.body;
+  const result = await authService.verifyOtp(email, otp);
+  ApiResponse.ok(res, result, 'Login successful.');
+});
+
+/**
  * POST /api/v1/auth/logout
  * Logout — blacklists the current JWT token in Redis
  * The token remains blacklisted until its natural expiry time.
@@ -70,4 +90,24 @@ const refreshToken = asyncHandler(async (req, res) => {
   ApiResponse.ok(res, result, 'Token refreshed successfully.');
 });
 
-module.exports = { register, login, logout, refreshToken };
+/**
+ * POST /api/v1/auth/forgot-password
+ * Request a password reset link/token
+ */
+const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  const result = await authService.forgotPassword(email);
+  ApiResponse.ok(res, result, result.message);
+});
+
+/**
+ * POST /api/v1/auth/reset-password
+ * Reset password using reset token
+ */
+const resetPassword = asyncHandler(async (req, res) => {
+  const { token, password } = req.body;
+  const result = await authService.resetPassword(token, password);
+  ApiResponse.ok(res, result, result.message);
+});
+
+module.exports = { register, login, logout, refreshToken, sendOtp, verifyOtp, forgotPassword, resetPassword };

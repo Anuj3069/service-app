@@ -23,7 +23,12 @@ const registerSchema = {
       .messages({
         'string.pattern.base': 'Please provide a valid phone number',
       }),
-    password: Joi.string().min(6).max(128).required()
+    password: Joi.string().min(6).max(128)
+      .when('role', {
+        is: ROLES.WORKER,
+        then: Joi.required(),
+        otherwise: Joi.optional()
+      })
       .messages({
         'string.min': 'Password must be at least 6 characters',
         'any.required': 'Password is required',
@@ -53,4 +58,54 @@ const loginSchema = {
   }),
 };
 
-module.exports = { registerSchema, loginSchema };
+const sendOtpSchema = {
+  body: Joi.object({
+    email: Joi.string().email().lowercase().trim().required()
+      .messages({
+        'string.email': 'Please provide a valid email address',
+        'any.required': 'Email is required',
+      }),
+  }),
+};
+
+const verifyOtpSchema = {
+  body: Joi.object({
+    email: Joi.string().email().lowercase().trim().required()
+      .messages({
+        'string.email': 'Please provide a valid email address',
+        'any.required': 'Email is required',
+      }),
+    otp: Joi.string().length(6).pattern(/^\d+$/).required()
+      .messages({
+        'string.length': 'OTP must be exactly 6 digits',
+        'string.pattern.base': 'OTP must contain only numbers',
+        'any.required': 'OTP is required',
+      }),
+  }),
+};
+
+const forgotPasswordSchema = {
+  body: Joi.object({
+    email: Joi.string().email().lowercase().trim().required()
+      .messages({
+        'string.email': 'Please provide a valid email address',
+        'any.required': 'Email is required',
+      }),
+  }),
+};
+
+const resetPasswordSchema = {
+  body: Joi.object({
+    token: Joi.string().required()
+      .messages({
+        'any.required': 'Reset token is required',
+      }),
+    password: Joi.string().min(6).max(128).required()
+      .messages({
+        'string.min': 'New password must be at least 6 characters',
+        'any.required': 'New password is required',
+      }),
+  }),
+};
+
+module.exports = { registerSchema, loginSchema, sendOtpSchema, verifyOtpSchema, forgotPasswordSchema, resetPasswordSchema };
