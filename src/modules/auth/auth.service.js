@@ -293,7 +293,7 @@ class AuthService {
 
     // 6. Send email with reset token
     const { sendEmail } = require('../../shared/utils/email');
-    const resetLink = `http://localhost:3000/api/v1/auth/reset-password?token=${token}`;
+    const resetLink = `${config.frontendUrl}/reset-password?token=${token}`;
     await sendEmail({
       to: email,
       subject: 'Password Reset Request',
