@@ -6,6 +6,21 @@ const Joi = require('joi');
 const { objectId } = require('../../shared/validators/common.validators');
 const { BOOKING_STATUS } = require('../../shared/utils/constants');
 
+const customerLocationSchema = Joi.object({
+  coordinates: Joi.array()
+    .ordered(
+      Joi.number().min(-180).max(180),
+      Joi.number().min(-90).max(90)
+    )
+    .length(2)
+    .required(),
+  address: Joi.string().trim().optional(),
+  addressId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional(),
+  fullAddress: Joi.string().trim().max(500).optional(),
+  addressLine2: Joi.string().trim().max(200).optional().allow(''),
+  label: Joi.string().valid('home', 'work', 'other').optional(),
+}).optional();
+
 const createBookingSchema = {
   body: Joi.object({
     providerId: objectId.required()
@@ -28,16 +43,7 @@ const createBookingSchema = {
         'number.min': 'Price cannot be negative',
         'any.required': 'Price is required',
       }),
-    customerLocation: Joi.object({
-      coordinates: Joi.array()
-        .ordered(
-          Joi.number().min(-180).max(180),
-          Joi.number().min(-90).max(90)
-        )
-        .length(2)
-        .required(),
-      address: Joi.string().trim().optional(),
-    }).optional(),
+    customerLocation: customerLocationSchema,
   }),
 };
 
@@ -55,16 +61,7 @@ const createInstantBookingSchema = {
         .required(),
       address: Joi.string().trim().optional(),
     }).optional(),
-    customerLocation: Joi.object({
-      coordinates: Joi.array()
-        .ordered(
-          Joi.number().min(-180).max(180),
-          Joi.number().min(-90).max(90)
-        )
-        .length(2)
-        .required(),
-      address: Joi.string().trim().optional(),
-    }).optional(),
+    customerLocation: customerLocationSchema,
   }),
 };
 

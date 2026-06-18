@@ -22,6 +22,7 @@ const bookingRoutes = require('./modules/booking/booking.routes');
 const reviewRoutes = require('./modules/review/review.routes');
 const nearbyWorkersRoutes = require('./modules/provider/nearby-workers.routes');
 const chatRoutes = require('./modules/chat/chat.routes');
+const { addressRoutes } = require('./modules/address');
 const paymentRoutes = require('./modules/payment/payment.routes');
 const { adminRoutes } = require('./modules/admin');
 const settlementWorkerRoutes = require('./modules/settlement/settlement.worker.routes');
@@ -72,6 +73,7 @@ app.use(`${API_PREFIX}/user/match`, matchRoutes);
 
 // Booking routes handle both /user/bookings and /worker/bookings
 app.use(`${API_PREFIX}`, bookingRoutes);
+app.use(`${API_PREFIX}`, addressRoutes);
 app.use(`${API_PREFIX}`, chatRoutes);
 app.use(`${API_PREFIX}/payments`, paymentRoutes);
 app.use(`${API_PREFIX}/admin`, adminRoutes);

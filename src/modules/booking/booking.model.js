@@ -124,6 +124,13 @@ const bookingSchema = new mongoose.Schema(
       },
       coordinates: [Number], // [longitude, latitude]
       address: String,
+      addressId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Address',
+      },
+      fullAddress: String,
+      addressLine2: String,
+      label: String, // home, work, other
     },
 
     // ── OTP for job completion verification ─────────────────
