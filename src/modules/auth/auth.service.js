@@ -100,7 +100,7 @@ class AuthService {
     if (user) {
       // Check if user is a customer
       if (user.role !== ROLES.CUSTOMER) {
-        throw AppError.forbidden('OTP login is only available for customer accounts.');
+        throw AppError.forbidden(`OTP login is only available for customer accounts. This email is already registered as a ${user.role}.`);
       }
 
       // Check if account is active
@@ -160,7 +160,7 @@ class AuthService {
     if (user) {
       // Check if user is a customer
       if (user.role !== ROLES.CUSTOMER) {
-        throw AppError.forbidden('OTP login is only available for customer accounts.');
+        throw AppError.forbidden(`OTP login is only available for customer accounts. This email is already registered as a ${user.role}.`);
       }
 
       // Check if account is active
