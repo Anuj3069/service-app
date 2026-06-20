@@ -98,6 +98,10 @@ class BookingService {
         type: 'Point',
         coordinates: customerLocation.coordinates,
         address: customerLocation.address || '',
+        addressId: customerLocation.addressId,
+        fullAddress: customerLocation.fullAddress,
+        addressLine2: customerLocation.addressLine2,
+        label: customerLocation.label,
       } : undefined
     });
 
@@ -197,6 +201,10 @@ class BookingService {
         type: 'Point',
         coordinates: activeLocation.coordinates,
         address: activeLocation.address || '',
+        addressId: activeLocation.addressId,
+        fullAddress: activeLocation.fullAddress,
+        addressLine2: activeLocation.addressLine2,
+        label: activeLocation.label,
       } : undefined
     });
 
