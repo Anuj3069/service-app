@@ -66,6 +66,11 @@ const serviceSchema = new mongoose.Schema(
       required: [true, 'Base price is required'],
       min: [0, 'Price cannot be negative'],
     },
+    monthBasePrice: {
+      type: Number,
+      default: null,
+      min: [0, 'Monthly base price cannot be negative'],
+    },
     duration: {
       type: Number, // Duration in minutes
       required: [true, 'Duration is required'],

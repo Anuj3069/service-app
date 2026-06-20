@@ -150,7 +150,7 @@ class BookingRepository {
   async findByParentId(parentBookingId, filters = {}) {
     return Booking.find({ parentBookingId, ...filters })
       .populate('userId', 'name email phone')
-      .populate('serviceId', 'name basePrice duration allowMonthBooking')
+      .populate('serviceId', 'name basePrice monthBasePrice duration allowMonthBooking')
       .populate({
         path: 'providerId',
         select: 'userId skills rating',

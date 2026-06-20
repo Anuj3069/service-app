@@ -111,6 +111,7 @@ const createServiceSchema = {
     searchRadiusKm: Joi.number().min(1).max(50).optional(),
     pricePerKm: Joi.number().min(0).optional(),
     allowMonthBooking: Joi.boolean().default(false),
+    monthBasePrice: Joi.number().min(0).optional(),
   }),
 };
 
@@ -129,6 +130,7 @@ const updateServiceSchema = {
     pricePerKm: Joi.number().min(0).optional(),
     isActive: Joi.boolean().optional(),
     allowMonthBooking: Joi.boolean().optional(),
+    monthBasePrice: Joi.number().min(0).optional(),
   }),
 };
 

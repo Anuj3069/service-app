@@ -175,10 +175,13 @@ class BookingService {
       logger.error('Failed to load settings during month booking:', e);
     }
 
-    // 7. Pricing — service.basePrice is the half-day (9h) daily rate
-    const dailyRate  = durationType === 'FULL_DAY'
-      ? Math.round((service.basePrice * 16) / 9)
-      : service.basePrice;
+    // 7. Pricing — monthBasePrice is the half-day (9h) daily rate; full-day is 2x
+    if (!service.monthBasePrice) {
+      throw AppError.badRequest('Monthly base price is not configured for this service.');
+    }
+    const dailyRate = durationType === 'FULL_DAY'
+      ? service.monthBasePrice * 2
+      : service.monthBasePrice;
     const totalPrice = dailyRate * workingDays.length;
     const payout     = totalPrice * (1 - commissionRate / 100);
 
@@ -353,21 +356,7 @@ class BookingService {
     const candidateProviders = topCandidates.map((p) => p._id);
     const candidateUserIds = topCandidates.map((p) => p.userId._id.toString());
 
-    // Calculate price with distance if applicable
-    let price = service.basePrice;
-    if (activeLocation && service.pricePerKm > 0 && availableProviders.length > 0) {
-      const nearestProvider = availableProviders[0];
-      if (nearestProvider.location?.coordinates) {
-        const geoService = require('../../shared/utils/geo.service');
-        const distanceInfo = await geoService.getDistanceAndETA(
-          activeLocation.coordinates,
-          nearestProvider.location.coordinates
-        );
-        if (distanceInfo) {
-          price = service.basePrice + geoService.calculateDistancePrice(distanceInfo.distanceKm, service.pricePerKm);
-        }
-      }
-    }
+    const price = service.basePrice;
 
     // 3. Calculate commission rate and worker payout
     let commissionRate = 10; // Default 10%
