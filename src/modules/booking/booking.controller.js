@@ -282,6 +282,16 @@ const _getProviderId = async (userId) => {
 };
 
 /**
+ * GET /api/v1/worker/bookings/:id
+ * Get a single booking by ID for the worker
+ */
+const getWorkerBookingById = asyncHandler(async (req, res) => {
+  const providerId = await _getProviderId(req.user.id);
+  const booking = await bookingService.getWorkerBookingById(providerId, req.params.id);
+  ApiResponse.ok(res, { booking }, 'Booking retrieved successfully.');
+});
+
+/**
  * GET /api/v1/worker/bookings
  * Get assigned bookings for the worker
  */
@@ -427,6 +437,7 @@ module.exports = {
   payBooking,
   payBookingByCash,
   getWorkerBookings,
+  getWorkerBookingById,
   acceptBooking,
   rejectBooking,
   completeBooking,

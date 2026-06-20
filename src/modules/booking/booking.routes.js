@@ -39,6 +39,7 @@ const {
   payBooking,
   payBookingByCash,
   getWorkerBookings,
+  getWorkerBookingById,
   acceptBooking,
   rejectBooking,
   completeBooking,
@@ -137,6 +138,13 @@ router.get(
   authorize(ROLES.WORKER),
   validate(listBookingsSchema),
   getWorkerBookings
+);
+
+router.get(
+  '/worker/bookings/:id',
+  authenticate,
+  authorize(ROLES.WORKER),
+  getWorkerBookingById
 );
 
 router.put(

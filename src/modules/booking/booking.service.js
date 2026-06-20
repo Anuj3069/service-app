@@ -547,6 +547,23 @@ class BookingService {
   /**
    * Get bookings assigned to a worker (including instant booking candidates)
    */
+  async getWorkerBookingById(providerId, bookingId) {
+    const booking = await bookingRepository.findById(bookingId);
+    if (!booking) throw AppError.notFound('Booking not found.');
+
+    const isAssigned = booking.providerId &&
+      booking.providerId._id.toString() === providerId.toString();
+    const isCandidate = booking.candidateProviders.some(
+      (cp) => cp._id.toString() === providerId.toString()
+    );
+
+    if (!isAssigned && !isCandidate) {
+      throw AppError.forbidden('You do not have access to this booking.');
+    }
+
+    return booking;
+  }
+
   async getWorkerBookings(providerId, status) {
     const filters = {};
     if (status) {
