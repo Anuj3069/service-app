@@ -83,6 +83,37 @@ const cancelBookingSchema = {
   }),
   body: Joi.object({
     cancellationReason: Joi.string().trim().max(300).optional(),
+    cancellationScope: Joi.string()
+      .valid('THIS', 'ALL')
+      .default('THIS')
+      .messages({
+        'any.only': 'cancellationScope must be THIS (single instance) or ALL (entire month contract)',
+      }),
+  }),
+};
+
+const createMonthBookingSchema = {
+  body: Joi.object({
+    providerId: objectId.required()
+      .messages({ 'any.required': 'Provider ID is required for monthly booking' }),
+    serviceId: objectId.required()
+      .messages({ 'any.required': 'Service ID is required' }),
+    durationType: Joi.string()
+      .valid('HALF_DAY', 'FULL_DAY')
+      .required()
+      .messages({
+        'any.only': 'durationType must be HALF_DAY (9 hours) or FULL_DAY (16 hours)',
+        'any.required': 'durationType is required',
+      }),
+    monthStartDate: Joi.date()
+      .iso()
+      .min('now')
+      .required()
+      .messages({
+        'any.required': 'monthStartDate is required (YYYY-MM-DD format)',
+        'date.min': 'monthStartDate must be today or a future date',
+      }),
+    customerLocation: customerLocationSchema,
   }),
 };
 
@@ -111,6 +142,7 @@ const listBookingsSchema = {
 module.exports = {
   createBookingSchema,
   createInstantBookingSchema,
+  createMonthBookingSchema,
   getBookingByIdSchema,
   bookingActionSchema,
   cancelBookingSchema,

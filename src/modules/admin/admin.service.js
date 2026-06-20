@@ -366,6 +366,17 @@ class AdminService {
     return service;
   }
 
+  async toggleServiceMonthBooking(serviceId, allowMonthBooking) {
+    const service = await serviceRepository.updateService(serviceId, { allowMonthBooking });
+    if (!service) {
+      throw AppError.notFound('Service not found.');
+    }
+    await cache.del(CACHE_KEYS.ALL_SERVICES);
+    await cache.del(CACHE_KEYS.SERVICE_BY_ID(serviceId));
+    logger.info(`Service ${serviceId} allowMonthBooking set to ${allowMonthBooking}`);
+    return service;
+  }
+
   /**
    * Review KYC document for a provider (approve or reject)
    * @param {string} providerId - Provider's user ID

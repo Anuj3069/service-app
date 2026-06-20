@@ -131,6 +131,14 @@ const deleteService = asyncHandler(async (req, res) => {
   ApiResponse.ok(res, null, 'Service deactivated successfully.');
 });
 
+const toggleServiceMonthBooking = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { allowMonthBooking } = req.body;
+  const service = await adminService.toggleServiceMonthBooking(id, allowMonthBooking);
+  const state = allowMonthBooking ? 'enabled' : 'disabled';
+  ApiResponse.ok(res, { service }, `Monthly booking ${state} for this service.`);
+});
+
 // ── BOOKING CONTROLLERS ──────────────────────────────────────
 
 const listBookings = asyncHandler(async (req, res) => {
@@ -239,6 +247,7 @@ module.exports = {
   createService,
   updateService,
   deleteService,
+  toggleServiceMonthBooking,
   listBookings,
   getBookingById,
   cancelBooking,

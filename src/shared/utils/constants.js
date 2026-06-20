@@ -60,10 +60,29 @@ const SETTLEMENT_STATUS = Object.freeze({
   REJECTED:   'rejected',
 });
 
+const BOOKING_TYPE = Object.freeze({
+  BOOK_LATER:     'BOOK_LATER',
+  BOOK_INSTANT:   'BOOK_INSTANT',
+  BOOK_FOR_MONTH: 'BOOK_FOR_MONTH',
+});
+
+const DURATION_TYPE = Object.freeze({
+  HALF_DAY: 'HALF_DAY',
+  FULL_DAY: 'FULL_DAY',
+});
+
+const DURATION_HOURS = Object.freeze({
+  HALF_DAY: 9,
+  FULL_DAY: 16,
+});
+
 module.exports = {
   ROLES,
   BOOKING_STATUS,
   BOOKING_TRANSITIONS,
   DAYS_OF_WEEK,
   SETTLEMENT_STATUS,
+  BOOKING_TYPE,
+  DURATION_TYPE,
+  DURATION_HOURS,
 };

@@ -20,6 +20,7 @@ const { ROLES } = require('../../shared/utils/constants');
 const {
   createBookingSchema,
   createInstantBookingSchema,
+  createMonthBookingSchema,
   getBookingByIdSchema,
   bookingActionSchema,
   cancelBookingSchema,
@@ -29,16 +30,18 @@ const {
 const {
   createBooking,
   createInstantBooking,
+  createMonthBooking,
   getUserBookings,
   getBookingById,
   cancelUserBooking,
+  getCompletionOtp,
+  getMonthBookingChildren,
+  payBooking,
+  payBookingByCash,
   getWorkerBookings,
   acceptBooking,
   rejectBooking,
   completeBooking,
-  getCompletionOtp,
-  payBooking,
-  payBookingByCash,
 } = require('./booking.controller');
 
 const router = Router();
@@ -58,6 +61,14 @@ router.post(
   authorize(ROLES.CUSTOMER),
   validate(createInstantBookingSchema),
   createInstantBooking
+);
+
+router.post(
+  '/user/month-booking',
+  authenticate,
+  authorize(ROLES.CUSTOMER),
+  validate(createMonthBookingSchema),
+  createMonthBooking
 );
 
 router.get(
@@ -82,6 +93,15 @@ router.put(
   authorize(ROLES.CUSTOMER),
   validate(cancelBookingSchema),
   cancelUserBooking
+);
+
+// Customer fetches the daily schedule for a month booking
+router.get(
+  '/user/bookings/:id/schedule',
+  authenticate,
+  authorize(ROLES.CUSTOMER),
+  validate(getBookingByIdSchema),
+  getMonthBookingChildren
 );
 
 // Customer fetches OTP for their accepted booking

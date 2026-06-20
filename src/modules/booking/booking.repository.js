@@ -136,6 +136,57 @@ class BookingRepository {
       { $set: { status: 'expired' } }
     );
   }
+
+  /**
+   * Bulk insert multiple bookings (used for month booking child instances)
+   */
+  async createMany(dataArray) {
+    return Booking.insertMany(dataArray, { ordered: false });
+  }
+
+  /**
+   * Find all child bookings belonging to a master month booking
+   */
+  async findByParentId(parentBookingId, filters = {}) {
+    return Booking.find({ parentBookingId, ...filters })
+      .populate('userId', 'name email phone')
+      .populate('serviceId', 'name basePrice duration allowMonthBooking')
+      .populate({
+        path: 'providerId',
+        select: 'userId skills rating',
+        populate: { path: 'userId', select: 'name email phone' },
+      })
+      .sort({ bookingSequence: 1 });
+  }
+
+  /**
+   * Cancel all non-terminal child bookings of a month contract
+   */
+  async cancelChildBookings(parentBookingId, reason) {
+    return Booking.updateMany(
+      {
+        parentBookingId,
+        status: { $nin: ['completed', 'cancelled', 'expired'] },
+      },
+      {
+        $set: {
+          status: 'cancelled',
+          cancelledAt: new Date(),
+          cancellationReason: reason,
+        },
+      }
+    );
+  }
+
+  /**
+   * Count active (non-terminal) child bookings for a master month booking
+   */
+  async countActiveChildBookings(parentBookingId) {
+    return Booking.countDocuments({
+      parentBookingId,
+      status: { $nin: ['completed', 'cancelled', 'expired', 'rejected'] },
+    });
+  }
 }
 
 module.exports = new BookingRepository();

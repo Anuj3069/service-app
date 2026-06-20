@@ -91,6 +91,11 @@ const serviceSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    allowMonthBooking: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   {
     timestamps: true,

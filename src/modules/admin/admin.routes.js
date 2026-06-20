@@ -46,6 +46,7 @@ router.delete('/categories/:id', validate(idParam), adminController.deleteCatego
 router.post('/services', validate(adminValidation.createServiceSchema), adminController.createService);
 router.patch('/services/:id', validate(adminValidation.updateServiceSchema), adminController.updateService);
 router.delete('/services/:id', validate(idParam), adminController.deleteService);
+router.patch('/services/:id/month-booking', validate(adminValidation.toggleMonthBookingSchema), adminController.toggleServiceMonthBooking);
 
 // ── BOOKING ROUTES ───────────────────────────────────────────
 router.get('/bookings', validate(adminValidation.listBookingsSchema), adminController.listBookings);

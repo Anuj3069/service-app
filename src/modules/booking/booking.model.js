@@ -15,6 +15,12 @@ const bookingSchema = new mongoose.Schema(
       enum: ['SCHEDULED', 'INSTANT'],
       default: 'SCHEDULED',
     },
+    bookingType: {
+      type: String,
+      enum: ['BOOK_LATER', 'BOOK_INSTANT', 'BOOK_FOR_MONTH'],
+      default: 'BOOK_LATER',
+      index: true,
+    },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -166,6 +172,38 @@ const bookingSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+
+    // ── Duration (BOOK_FOR_MONTH) ────────────────────────────────
+    durationType: {
+      type: String,
+      enum: ['HALF_DAY', 'FULL_DAY'],
+      default: null,
+    },
+    durationHours: {
+      type: Number,
+      enum: [9, 16],
+      default: null,
+    },
+
+    // ── Monthly contract metadata ────────────────────────────────
+    monthContract: {
+      startDate:  { type: Date, default: null },
+      endDate:    { type: Date, default: null },
+      totalDays:  { type: Number, default: null },
+      dailyPrice: { type: Number, default: null },
+    },
+
+    // ── Recurring hierarchy ──────────────────────────────────────
+    parentBookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Booking',
+      default: null,
+      index: true,
+    },
+    bookingSequence: {
+      type: Number,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -190,6 +228,9 @@ bookingSchema.index({ userId: 1, status: 1, createdAt: -1 });
 
 // Worker's assigned bookings
 bookingSchema.index({ providerId: 1, status: 1, createdAt: -1 });
+
+// Month booking lookup
+bookingSchema.index({ 'monthContract.startDate': 1 });
 
 // NOTE: We do not use MongoDB TTL deletion for booking expiries.
 // Expiry is handled in service logic to preserve booking history and status.

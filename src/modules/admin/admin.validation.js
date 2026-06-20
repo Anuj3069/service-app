@@ -110,6 +110,7 @@ const createServiceSchema = {
     requiredSkills: Joi.array().items(Joi.string().trim()).optional(),
     searchRadiusKm: Joi.number().min(1).max(50).optional(),
     pricePerKm: Joi.number().min(0).optional(),
+    allowMonthBooking: Joi.boolean().default(false),
   }),
 };
 
@@ -127,6 +128,18 @@ const updateServiceSchema = {
     searchRadiusKm: Joi.number().min(1).max(50).optional(),
     pricePerKm: Joi.number().min(0).optional(),
     isActive: Joi.boolean().optional(),
+    allowMonthBooking: Joi.boolean().optional(),
+  }),
+};
+
+const toggleMonthBookingSchema = {
+  params: Joi.object({
+    id: objectId.required(),
+  }),
+  body: Joi.object({
+    allowMonthBooking: Joi.boolean().required().messages({
+      'any.required': 'allowMonthBooking boolean is required',
+    }),
   }),
 };
 
@@ -226,6 +239,7 @@ module.exports = {
   updateCategorySchema,
   createServiceSchema,
   updateServiceSchema,
+  toggleMonthBookingSchema,
   listBookingsSchema,
   cancelBookingSchema,
   listPaymentsSchema,

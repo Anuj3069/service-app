@@ -129,10 +129,12 @@ const getBookingById = asyncHandler(async (req, res) => {
  * Cancel a requested or pending booking
  */
 const cancelUserBooking = asyncHandler(async (req, res) => {
+  const { cancellationReason, cancellationScope = 'THIS' } = req.body;
   const booking = await bookingService.cancelUserBooking(
     req.user.id,
     req.params.id,
-    req.body.cancellationReason
+    cancellationReason,
+    cancellationScope
   );
 
   await expiryScheduler.cancel(req.params.id);
@@ -205,6 +207,63 @@ const payBookingByCash = asyncHandler(async (req, res) => {
 const getCompletionOtp = asyncHandler(async (req, res) => {
   const result = await bookingService.getCompletionOtp(req.user.id, req.params.id);
   ApiResponse.ok(res, result, 'OTP retrieved successfully.');
+});
+
+/**
+ * POST /api/v1/user/month-booking
+ * Create a month-long booking contract (admin-enabled services only)
+ */
+const createMonthBooking = asyncHandler(async (req, res) => {
+  const result = await bookingService.createBooking(req.user.id, {
+    ...req.body,
+    bookingType: 'BOOK_FOR_MONTH',
+  });
+
+  const io = req.app.get('io');
+  const socketStore = req.app.get('socketStore');
+
+  if (io && socketStore && result.master.providerId?.userId) {
+    const providerUserId = result.master.providerId.userId._id
+      ? result.master.providerId.userId._id.toString()
+      : result.master.providerId.userId.toString();
+
+    const socketId = await socketStore.get(providerUserId);
+    if (socketId) {
+      io.to(socketId).emit('new-month-booking', {
+        bookingId:     result.master._id,
+        service:       { id: result.master.serviceId._id, name: result.master.serviceId.name },
+        durationType:  result.master.durationType,
+        durationHours: result.durationHours,
+        daysScheduled: result.daysScheduled,
+        totalPrice:    result.totalPrice,
+        dailyPrice:    result.dailyPrice,
+        monthStartDate: result.monthStartDate,
+        monthEndDate:   result.monthEndDate,
+        status:        result.master.status,
+      });
+    } else {
+      const provider = await providerRepository.findByUserId(providerUserId);
+      if (provider?.fcmToken) {
+        await sendPushNotification({
+          fcmToken: provider.fcmToken,
+          title: 'New Monthly Booking Request',
+          body: `${result.daysScheduled}-day booking for ${result.master.serviceId.name}`,
+          data: { bookingId: result.master._id.toString(), type: 'new-month-booking' },
+        });
+      }
+    }
+  }
+
+  ApiResponse.created(res, result, 'Month booking created successfully. Waiting for provider confirmation.');
+});
+
+/**
+ * GET /api/v1/user/bookings/:id/schedule
+ * List all daily child bookings for a month contract
+ */
+const getMonthBookingChildren = asyncHandler(async (req, res) => {
+  const children = await bookingService.getMonthBookingChildren(req.user.id, req.params.id);
+  ApiResponse.ok(res, { children, count: children.length }, 'Monthly booking schedule retrieved successfully.');
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -359,10 +418,12 @@ const completeBooking = asyncHandler(async (req, res) => {
 module.exports = {
   createBooking,
   createInstantBooking,
+  createMonthBooking,
   getUserBookings,
   getBookingById,
   cancelUserBooking,
   getCompletionOtp,
+  getMonthBookingChildren,
   payBooking,
   payBookingByCash,
   getWorkerBookings,

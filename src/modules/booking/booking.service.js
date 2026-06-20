@@ -11,7 +11,7 @@
  */
 
 const AppError = require('../../shared/utils/api-error');
-const { BOOKING_STATUS, BOOKING_TRANSITIONS } = require('../../shared/utils/constants');
+const { BOOKING_STATUS, BOOKING_TRANSITIONS, BOOKING_TYPE, DURATION_HOURS } = require('../../shared/utils/constants');
 const config = require('../../config');
 const logger = require('../../config/logger');
 const bookingRepository = require('./booking.repository');
@@ -32,10 +32,23 @@ class BookingService {
   // ─────────────────────────────────────────────────────────
 
   /**
-   * Create a new booking
+   * Route to the correct booking handler based on bookingType
+   */
+  async createBooking(userId, payload) {
+    const { bookingType = BOOKING_TYPE.BOOK_LATER } = payload;
+
+    if (bookingType === BOOKING_TYPE.BOOK_FOR_MONTH) {
+      return this._handleMonthBooking(userId, payload);
+    }
+
+    return this._handleBookLater(userId, payload);
+  }
+
+  /**
+   * Book Later — single scheduled booking with a specific provider, date, and slot
    * CRITICAL: Rechecks provider availability before creating
    */
-  async createBooking(userId, { providerId, serviceId, date, slot, price, customerLocation }) {
+  async _handleBookLater(userId, { providerId, serviceId, date, slot, price, customerLocation }) {
     // 1. Validate service exists
     const service = await Service.findById(serviceId);
     if (!service || !service.isActive) {
@@ -62,7 +75,7 @@ class BookingService {
 
     // 4. Calculate expiry time & commission rate
     let expiryMinutes = config.booking.expiryMinutes;
-    let commissionRate = 10; // Default 10%
+    let commissionRate = 10;
     try {
       const Setting = require('../admin/setting.model');
       const settings = await Setting.findOne();
@@ -84,6 +97,7 @@ class BookingService {
 
     // 5. Create booking
     const booking = await bookingRepository.create({
+      bookingType: BOOKING_TYPE.BOOK_LATER,
       userId,
       providerId,
       serviceId,
@@ -107,8 +121,193 @@ class BookingService {
 
     logger.info(`📝 Booking created: ${booking._id} | User: ${userId} | Provider: ${providerId} | Expires: ${expiresAt}`);
 
-    // Return populated booking
     return bookingRepository.findById(booking._id);
+  }
+
+  /**
+   * Book for Month — creates master + daily child bookings for the selected calendar month
+   * Only available for services where admin has set allowMonthBooking: true
+   */
+  async _handleMonthBooking(userId, { providerId, serviceId, durationType, monthStartDate, customerLocation }) {
+    // 1. Validate service
+    const service = await Service.findById(serviceId);
+    if (!service || !service.isActive) {
+      throw AppError.notFound('Service not found or is inactive.');
+    }
+
+    // 2. ❗ GATE: admin must have enabled monthly booking for this service
+    if (!service.allowMonthBooking) {
+      throw AppError.forbidden('Monthly booking is not available for this service.');
+    }
+
+    // 3. Validate provider
+    const provider = await providerRepository.findById(providerId);
+    if (!provider) {
+      throw AppError.notFound('Provider not found.');
+    }
+    if (!provider.isAvailable || !provider.isVerified) {
+      throw AppError.badRequest('Provider is not currently available.');
+    }
+
+    // 4. Resolve duration
+    const durationHours = this._assignDurationHours(durationType);
+
+    // 5. Compute working days for the selected month
+    const workingDays = this._getWorkingDaysInMonth(monthStartDate);
+    if (workingDays.length === 0) {
+      throw AppError.badRequest('No working days found in the selected month.');
+    }
+
+    const startDate = workingDays[0];
+    const endDate   = workingDays[workingDays.length - 1];
+
+    // 6. Load commission rate
+    let commissionRate = 10;
+    let expiryMinutes = config.booking.expiryMinutes;
+    try {
+      const Setting = require('../admin/setting.model');
+      const settings = await Setting.findOne();
+      if (settings) {
+        if (settings.commissionRate !== undefined) commissionRate = settings.commissionRate;
+        if (settings.bookingExpiryMinutes) expiryMinutes = settings.bookingExpiryMinutes;
+      }
+    } catch (e) {
+      logger.error('Failed to load settings during month booking:', e);
+    }
+
+    // 7. Pricing — service.basePrice is the half-day (9h) daily rate
+    const dailyRate  = durationType === 'FULL_DAY'
+      ? Math.round((service.basePrice * 16) / 9)
+      : service.basePrice;
+    const totalPrice = dailyRate * workingDays.length;
+    const payout     = totalPrice * (1 - commissionRate / 100);
+
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + expiryMinutes);
+
+    const locationData = customerLocation ? {
+      type: 'Point',
+      coordinates:  customerLocation.coordinates,
+      address:      customerLocation.address || '',
+      addressId:    customerLocation.addressId,
+      fullAddress:  customerLocation.fullAddress,
+      addressLine2: customerLocation.addressLine2,
+      label:        customerLocation.label,
+    } : undefined;
+
+    // 8. Create master booking (bookingSequence = 0, parentBookingId = null)
+    const master = await bookingRepository.create({
+      bookingType:    BOOKING_TYPE.BOOK_FOR_MONTH,
+      type:           'SCHEDULED',
+      userId,
+      providerId,
+      serviceId,
+      durationType,
+      durationHours,
+      date:           startDate,
+      slot:           null,
+      price:          totalPrice,
+      originalPrice:  totalPrice,
+      payout,
+      status:         BOOKING_STATUS.PENDING,
+      expiresAt,
+      parentBookingId: null,
+      bookingSequence: 0,
+      monthContract: {
+        startDate,
+        endDate,
+        totalDays:  workingDays.length,
+        dailyPrice: dailyRate,
+      },
+      customerLocation: locationData,
+    });
+
+    // 9. Bulk-insert one child booking per working day
+    const childPayout = dailyRate * (1 - commissionRate / 100);
+    const childData = workingDays.map((date, index) => ({
+      bookingType:    BOOKING_TYPE.BOOK_FOR_MONTH,
+      type:           'SCHEDULED',
+      userId,
+      providerId,
+      serviceId,
+      durationType,
+      durationHours,
+      date,
+      slot:           null,
+      price:          dailyRate,
+      originalPrice:  dailyRate,
+      payout:         childPayout,
+      status:         BOOKING_STATUS.PENDING,
+      parentBookingId: master._id,
+      bookingSequence: index + 1,
+      customerLocation: locationData,
+    }));
+
+    await bookingRepository.createMany(childData);
+
+    logger.info(
+      `📅 Book-for-month created: master=${master._id} | provider=${providerId} | ` +
+      `days=${workingDays.length} | ${durationType} (${durationHours}h/day) | total=₹${totalPrice}`
+    );
+
+    const populatedMaster = await bookingRepository.findById(master._id);
+    return {
+      master: populatedMaster,
+      daysScheduled: workingDays.length,
+      durationHours,
+      dailyPrice: dailyRate,
+      totalPrice,
+      monthStartDate: startDate,
+      monthEndDate: endDate,
+    };
+  }
+
+  /**
+   * Auto-assign durationHours from durationType
+   * @private
+   */
+  _assignDurationHours(durationType) {
+    return DURATION_HOURS[durationType] ?? DURATION_HOURS.HALF_DAY;
+  }
+
+  /**
+   * Generate one Date per Mon–Sat working day in the calendar month of startDate
+   * @private
+   */
+  _getWorkingDaysInMonth(startDate) {
+    const ref    = new Date(startDate);
+    const year   = ref.getFullYear();
+    const month  = ref.getMonth();
+    const cursor = new Date(year, month, 1);
+    const end    = new Date(year, month + 1, 0);
+    const skip   = new Set([0]); // 0 = Sunday
+
+    const days = [];
+    while (cursor <= end) {
+      if (!skip.has(cursor.getDay())) {
+        days.push(new Date(cursor));
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return days;
+  }
+
+  /**
+   * Get all daily child bookings for a month contract
+   */
+  async getMonthBookingChildren(userId, masterBookingId) {
+    const master = await bookingRepository.findById(masterBookingId);
+    if (!master) throw AppError.notFound('Booking not found.');
+
+    if (master.userId._id.toString() !== userId.toString()) {
+      throw AppError.forbidden('You do not have access to this booking.');
+    }
+
+    if (master.bookingType !== BOOKING_TYPE.BOOK_FOR_MONTH) {
+      throw AppError.badRequest('This endpoint is only for BOOK_FOR_MONTH bookings.');
+    }
+
+    return bookingRepository.findByParentId(masterBookingId);
   }
 
   /**
@@ -260,9 +459,11 @@ class BookingService {
   // ─────────────────────────────────────────────────────────
 
   /**
-   * Cancel a customer's booking before it has been accepted.
+   * Cancel a customer's booking.
+   * scope='THIS' cancels a single instance (default, existing behaviour).
+   * scope='ALL'  cancels the entire month contract + all non-terminal children.
    */
-  async cancelUserBooking(userId, bookingId, cancellationReason) {
+  async cancelUserBooking(userId, bookingId, cancellationReason, scope = 'THIS') {
     const booking = await bookingRepository.findById(bookingId);
     if (!booking) {
       throw AppError.notFound('Booking not found.');
@@ -272,6 +473,29 @@ class BookingService {
       throw AppError.forbidden('You do not have access to this booking.');
     }
 
+    const reason = cancellationReason || 'Cancelled by customer';
+
+    // ── scope: ALL — cancel entire month contract ────────────────
+    if (scope === 'ALL') {
+      if (booking.bookingType !== BOOKING_TYPE.BOOK_FOR_MONTH) {
+        throw AppError.badRequest('scope ALL is only valid for BOOK_FOR_MONTH bookings.');
+      }
+
+      const parentId = booking.parentBookingId || booking._id;
+
+      await bookingRepository.cancelChildBookings(parentId, reason);
+
+      const updatedMaster = await bookingRepository.updateById(parentId, {
+        status: BOOKING_STATUS.CANCELLED,
+        cancelledAt: new Date(),
+        cancellationReason: reason,
+      });
+
+      logger.info(`Month booking cancelled (ALL) | master=${parentId} | user=${userId}`);
+      return { cancelled: true, scope: 'ALL', parentBookingId: parentId, booking: updatedMaster };
+    }
+
+    // ── scope: THIS — existing single-cancel logic ───────────────
     const cancellableStatuses = [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.PENDING];
     if (!cancellableStatuses.includes(booking.status)) {
       throw AppError.badRequest(`Cannot cancel booking with status '${booking.status}'.`);
@@ -294,7 +518,7 @@ class BookingService {
       {
         status: BOOKING_STATUS.CANCELLED,
         cancelledAt: new Date(),
-        cancellationReason: cancellationReason || 'Cancelled by customer',
+        cancellationReason: reason,
         expiresAt: null,
       },
       { new: true, runValidators: true }
@@ -474,6 +698,15 @@ class BookingService {
     }
 
     logger.info(`✅ Booking accepted: ${bookingId} by provider: ${providerId} | OTP: ${otp}`);
+
+    // Cascade acceptance to all child day-bookings when a month-contract master is accepted
+    if (updated.bookingType === BOOKING_TYPE.BOOK_FOR_MONTH && !updated.parentBookingId) {
+      await BookingModel.updateMany(
+        { parentBookingId: updated._id, status: BOOKING_STATUS.PENDING },
+        { $set: { status: BOOKING_STATUS.ACCEPTED } }
+      );
+      logger.info(`Cascaded acceptance to child bookings | master=${updated._id}`);
+    }
 
     return { booking: updated, type: 'SCHEDULED' };
   }
