@@ -24,3 +24,6 @@ Thumbs.db
 # Build
 dist/
 build/
+
+# Firebase
+src/config/firebase-service-account.json

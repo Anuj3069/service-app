@@ -78,6 +78,10 @@ const providerSchema = new mongoose.Schema(
       type: Boolean,
       default: true, // Online/offline toggle
     },
+    fcmToken: {
+      type: String,
+      default: null,
+    },
     kyc: {
       documentType: {
         type: String,

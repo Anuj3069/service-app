@@ -57,6 +57,7 @@ const updateProfileSchema = {
       )
       .optional(),
     isAvailable: Joi.boolean().optional(),
+    fcmToken: Joi.string().optional().allow(null),
   }).min(1).messages({
     'object.min': 'At least one field must be provided for update',
   }),

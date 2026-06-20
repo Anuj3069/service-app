@@ -12,6 +12,7 @@ const providerRepository = require('../provider/provider.repository');
 const AppError = require('../../shared/utils/api-error');
 const expiryScheduler = require('../../shared/utils/expiry-scheduler');
 const logger = require('../../config/logger');
+const { sendPushNotification } = require('../../shared/utils/push-notification');
 
 // ─────────────────────────────────────────────────────────────
 //  CUSTOMER ENDPOINTS
@@ -44,6 +45,16 @@ const createBooking = asyncHandler(async (req, res) => {
         slot: booking.slot,
         status: booking.status,
       });
+    } else {
+      const provider = await providerRepository.findByUserId(providerUserId);
+      if (provider?.fcmToken) {
+        await sendPushNotification({
+          fcmToken: provider.fcmToken,
+          title: 'New Booking Request',
+          body: `New scheduled booking for ${booking.serviceId.name}`,
+          data: { bookingId: booking._id.toString(), type: 'new-scheduled-booking' },
+        });
+      }
     }
   }
 
@@ -74,7 +85,16 @@ const createInstantBooking = asyncHandler(async (req, res) => {
           expiresAt: booking.expiresAt,
         });
       } else {
-        logger.debug(`User ${userId} is not connected (no socketId found).`);
+        logger.debug(`User ${userId} is not connected — sending FCM push.`);
+        const provider = await providerRepository.findByUserId(userId.toString());
+        if (provider?.fcmToken) {
+          await sendPushNotification({
+            fcmToken: provider.fcmToken,
+            title: 'New Booking Request!',
+            body: 'A customer needs your service nearby. Tap to respond.',
+            data: { bookingId: booking._id.toString(), type: 'new-booking-request' },
+          });
+        }
       }
     }
   }
