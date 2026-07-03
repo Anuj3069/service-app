@@ -38,6 +38,7 @@ const {
   getMonthBookingChildren,
   payBooking,
   payBookingByCash,
+  confirmCashPayment,
   getWorkerBookings,
   getWorkerBookingById,
   acceptBooking,
@@ -123,14 +124,6 @@ router.post(
   payBooking
 );
 
-router.post(
-  '/user/bookings/:id/pay-cash',
-  authenticate,
-  authorize(ROLES.CUSTOMER),
-  validate(getBookingByIdSchema),
-  payBookingByCash
-);
-
 // ── WORKER BOOKING ROUTES ───────────────────────────────────
 router.get(
   '/worker/bookings',
@@ -169,6 +162,14 @@ router.put(
   authorize(ROLES.WORKER),
   validate(completeBookingSchema),
   completeBooking
+);
+
+router.post(
+  '/worker/bookings/:id/confirm-cash',
+  authenticate,
+  authorize(ROLES.WORKER),
+  validate(getBookingByIdSchema),
+  confirmCashPayment
 );
 
 module.exports = router;

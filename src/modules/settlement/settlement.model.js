@@ -53,6 +53,19 @@ const settlementSchema = new mongoose.Schema(
       trim: true,
       default: null,
     },
+    // Amount deducted from online payout to cover pending cash commissions
+    cashCommissionDeducted: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    // CashCommission document IDs that were netted in this settlement
+    cashCommissionIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'CashCommission',
+      },
+    ],
     requestedAt: {
       type: Date,
       required: true,

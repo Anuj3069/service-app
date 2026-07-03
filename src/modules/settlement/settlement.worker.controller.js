@@ -11,8 +11,15 @@ const settlementService = require('./settlement.service');
  * Worker requests a payout settlement for all unsettled earnings
  */
 const requestSettlement = asyncHandler(async (req, res) => {
-  const settlement = await settlementService.requestSettlement(req.user.id);
-  ApiResponse.created(res, { settlement }, 'Settlement request submitted successfully. Pending admin review.');
+  const { settlement, summary } = await settlementService.requestSettlement(req.user.id);
+  ApiResponse.created(
+    res,
+    { settlement, summary },
+    `Settlement request submitted. You will receive ₹${summary.netPayout}` +
+    (summary.cashCommissionDeducted > 0
+      ? ` (₹${summary.onlineEarnings} earned − ₹${summary.cashCommissionDeducted} cash commission).`
+      : '.')
+  );
 });
 
 /**

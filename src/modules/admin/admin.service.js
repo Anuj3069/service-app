@@ -547,6 +547,40 @@ class AdminService {
     return { success: true, message: 'Review deleted and provider rating updated.' };
   }
 
+  // ── WALLET / CASH COMMISSION MANAGEMENT ─────────────────────────────
+
+  /**
+   * List all cash commission entries with optional filters
+   */
+  async listCashCommissions(filters, pagination) {
+    const walletService = require('../wallet/wallet.service');
+    return walletService.listCashCommissions(filters, pagination);
+  }
+
+  /**
+   * Aggregated summary: how much each worker owes in cash commissions
+   */
+  async getCashCommissionSummary() {
+    const walletService = require('../wallet/wallet.service');
+    return walletService.getCashCommissionSummary();
+  }
+
+  /**
+   * Get a single cash commission entry
+   */
+  async getCashCommissionById(id) {
+    const walletService = require('../wallet/wallet.service');
+    return walletService.getCashCommissionById(id);
+  }
+
+  /**
+   * Mark a cash commission as collected
+   */
+  async markCommissionCollected(id, adminUserId, note) {
+    const walletService = require('../wallet/wallet.service');
+    return walletService.markCommissionCollected(id, adminUserId, note);
+  }
+
   // ── SETTLEMENT MANAGEMENT ────────────────────────────────────────────
 
   /**
@@ -601,6 +635,19 @@ class AdminService {
 
     const updated = await settlementRepository.updateById(id, update);
     logger.info(`💸 Settlement ${id} moved to '${status}' by Admin. Note: ${adminNote || '(none)'}`);
+
+    // If rejected, release the netted cash commissions back to 'pending'
+    // so they are included in the worker's next settlement request.
+    if (status === 'rejected') {
+      try {
+        const settlementService = require('../settlement/settlement.service');
+        await settlementService.revertCashCommissions(settlement);
+        logger.info(`↩️  Reverted ${settlement.cashCommissionIds?.length || 0} cash commission(s) to pending for settlement ${id}`);
+      } catch (err) {
+        logger.error('Failed to revert cash commissions on settlement rejection:', err);
+      }
+    }
+
     return updated;
   }
 }

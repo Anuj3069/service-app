@@ -765,20 +765,22 @@ class BookingService {
   }
 
   /**
-   * Mark a completed booking as paid by cash.
+   * Worker confirms they received cash from the customer.
+   * This is the authoritative trigger for cash payment — only the worker
+   * who holds the cash can confirm receipt.
    */
-  async payBookingByCash(userId, bookingId, { io, socketStore } = {}) {
+  async confirmCashPayment(providerId, bookingId, { io, socketStore } = {}) {
     const booking = await bookingRepository.findById(bookingId);
     if (!booking) {
       throw AppError.notFound('Booking not found.');
     }
 
-    if (booking.userId._id.toString() !== userId.toString()) {
-      throw AppError.forbidden('You do not have access to this booking.');
+    if (booking.providerId._id.toString() !== providerId.toString()) {
+      throw AppError.forbidden('This booking is not assigned to you.');
     }
 
     if (booking.status !== BOOKING_STATUS.COMPLETED) {
-      throw AppError.badRequest('Booking is not marked as completed yet. Cash payment can only be recorded on completion.');
+      throw AppError.badRequest('Cash can only be confirmed after the booking is marked complete.');
     }
 
     if (booking.paymentStatus === 'paid') {
@@ -795,6 +797,18 @@ class BookingService {
       method: 'cash',
       paidAt: new Date(),
     });
+
+    // Record the commission owed to admin for this cash payment.
+    // The worker physically holds the full amount; admin's share must be
+    // collected separately and is tracked in the wallet ledger.
+    try {
+      const walletService = require('../wallet/wallet.service');
+      await walletService.recordCashCommission(booking);
+      logger.info(`💰 Cash commission ledger entry created for booking: ${bookingId}`);
+    } catch (walletErr) {
+      // Non-fatal — log and continue so the payment confirmation still succeeds.
+      logger.error('Failed to record cash commission ledger entry:', walletErr);
+    }
 
     return this.finalizePayment(bookingId, { io, socketStore, paymentMethod: 'cash' });
   }

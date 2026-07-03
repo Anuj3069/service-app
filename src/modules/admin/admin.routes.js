@@ -66,4 +66,18 @@ router.get('/settlements',     validate(adminValidation.listSettlementsSchema), 
 router.get('/settlements/:id', validate(idParam),                                       adminController.getSettlementById);
 router.patch('/settlements/:id/status', validate(adminValidation.updateSettlementStatusSchema), adminController.updateSettlementStatus);
 
+// ── WALLET / CASH COMMISSION ROUTES ──────────────────────────
+// Primary resolution: commissions are auto-netted at settlement time (no admin action needed).
+// These endpoints provide visibility and a manual escape hatch for edge cases
+// (e.g. worker closes account, dispute resolution, accounting adjustments).
+
+// How much each worker owes in total
+router.get('/wallet/cash-commissions/summary', adminController.getCashCommissionSummary);
+// Full list, filterable by status (pending / collected) or providerId
+router.get('/wallet/cash-commissions', validate(adminValidation.listCashCommissionsSchema), adminController.listCashCommissions);
+// Single entry detail
+router.get('/wallet/cash-commissions/:id', validate(idParam), adminController.getCashCommissionById);
+// Escape hatch: manually mark a commission collected outside the settlement flow
+router.post('/wallet/cash-commissions/:id/collect', validate(adminValidation.markCommissionCollectedSchema), adminController.markCommissionCollected);
+
 module.exports = router;

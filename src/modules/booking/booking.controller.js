@@ -425,6 +425,19 @@ const completeBooking = asyncHandler(async (req, res) => {
   ApiResponse.ok(res, { booking }, 'Booking completed successfully. Great job!');
 });
 
+/**
+ * POST /api/v1/worker/bookings/:id/confirm-cash
+ * Worker confirms they physically received cash from the customer.
+ */
+const confirmCashPayment = asyncHandler(async (req, res) => {
+  const providerId = await _getProviderId(req.user.id);
+  const booking = await bookingService.confirmCashPayment(providerId, req.params.id, {
+    io: req.app.get('io'),
+    socketStore: req.app.get('socketStore'),
+  });
+  ApiResponse.ok(res, { booking }, 'Cash payment confirmed successfully.');
+});
+
 module.exports = {
   createBooking,
   createInstantBooking,
@@ -436,6 +449,7 @@ module.exports = {
   getMonthBookingChildren,
   payBooking,
   payBookingByCash,
+  confirmCashPayment,
   getWorkerBookings,
   getWorkerBookingById,
   acceptBooking,

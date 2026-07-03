@@ -228,6 +228,34 @@ const updateSettlementStatus = asyncHandler(async (req, res) => {
   ApiResponse.ok(res, { settlement }, `Settlement status updated to '${status}'.`);
 });
 
+// ── WALLET / CASH COMMISSION CONTROLLERS ─────────────────────────────
+
+const listCashCommissions = asyncHandler(async (req, res) => {
+  const { status, providerId, page, limit } = req.query;
+  const result = await adminService.listCashCommissions(
+    { status, providerId },
+    { page: Number(page) || 1, limit: Number(limit) || 20 }
+  );
+  ApiResponse.ok(res, result, 'Cash commissions retrieved successfully.');
+});
+
+const getCashCommissionSummary = asyncHandler(async (req, res) => {
+  const result = await adminService.getCashCommissionSummary();
+  ApiResponse.ok(res, result, 'Cash commission summary retrieved successfully.');
+});
+
+const getCashCommissionById = asyncHandler(async (req, res) => {
+  const entry = await adminService.getCashCommissionById(req.params.id);
+  ApiResponse.ok(res, entry, 'Cash commission retrieved successfully.');
+});
+
+const markCommissionCollected = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { note } = req.body;
+  const entry = await adminService.markCommissionCollected(id, req.user._id, note);
+  ApiResponse.ok(res, entry, 'Commission marked as collected.');
+});
+
 module.exports = {
   getDashboardStats,
   getSettings,
@@ -259,4 +287,8 @@ module.exports = {
   listSettlements,
   getSettlementById,
   updateSettlementStatus,
+  listCashCommissions,
+  getCashCommissionSummary,
+  getCashCommissionById,
+  markCommissionCollected,
 };

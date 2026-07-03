@@ -22,10 +22,12 @@ const bookingRoutes = require('./modules/booking/booking.routes');
 const reviewRoutes = require('./modules/review/review.routes');
 const nearbyWorkersRoutes = require('./modules/provider/nearby-workers.routes');
 const chatRoutes = require('./modules/chat/chat.routes');
+const supportRoutes = require('./modules/support/support.routes');
 const { addressRoutes } = require('./modules/address');
 const paymentRoutes = require('./modules/payment/payment.routes');
 const { adminRoutes } = require('./modules/admin');
 const settlementWorkerRoutes = require('./modules/settlement/settlement.worker.routes');
+const { walletRoutes } = require('./modules/wallet');
 
 const app = express();
 
@@ -75,9 +77,11 @@ app.use(`${API_PREFIX}/user/match`, matchRoutes);
 app.use(`${API_PREFIX}`, bookingRoutes);
 app.use(`${API_PREFIX}`, addressRoutes);
 app.use(`${API_PREFIX}`, chatRoutes);
+app.use(`${API_PREFIX}`, supportRoutes);
 app.use(`${API_PREFIX}/payments`, paymentRoutes);
 app.use(`${API_PREFIX}/admin`, adminRoutes);
 app.use(`${API_PREFIX}/worker/settlement`, settlementWorkerRoutes);
+app.use(`${API_PREFIX}/worker/wallet`, walletRoutes);
 
 app.use(`${API_PREFIX}/user/reviews`, reviewRoutes);
 app.use(`${API_PREFIX}/user/nearby-workers`, nearbyWorkersRoutes);

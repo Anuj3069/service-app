@@ -230,6 +230,22 @@ const updateSettlementStatusSchema = {
   }),
 };
 
+const listCashCommissionsSchema = {
+  query: paginationQuery.keys({
+    status: Joi.string().valid('pending', 'collected').optional(),
+    providerId: objectId.optional(),
+  }),
+};
+
+const markCommissionCollectedSchema = {
+  params: Joi.object({
+    id: objectId.required(),
+  }),
+  body: Joi.object({
+    note: Joi.string().trim().max(500).optional(),
+  }),
+};
+
 module.exports = {
   listUsersSchema,
   toggleUserStatusSchema,
@@ -249,4 +265,6 @@ module.exports = {
   reviewKycSchema,
   listSettlementsSchema,
   updateSettlementStatusSchema,
+  listCashCommissionsSchema,
+  markCommissionCollectedSchema,
 };

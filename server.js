@@ -74,18 +74,37 @@ const startServer = async () => {
 
       socket.on('register', async (data) => {
         let userId;
+        let role;
         if (typeof data === 'string') {
-          // If they sent raw string with quotes, strip them
           userId = data.replace(/^"|"$/g, '');
         } else if (data && data.userId) {
           userId = data.userId.toString();
+          role = data.role;
         } else {
           logger.error('Invalid register payload:', data);
           return;
         }
-        
+
         await socketStore.set(userId, socket.id);
         logger.info(`👤 User registered to socket (Redis): ${userId} -> ${socket.id}`);
+
+        // Admin joins a dedicated room so support events can target all admins
+        if (role === 'admin') {
+          socket.join('admin');
+          logger.info(`🛡️  Admin joined admin room: ${socket.id}`);
+        }
+      });
+
+      // Join a support ticket room to receive real-time messages
+      socket.on('join-support', ({ ticketId }) => {
+        if (!ticketId) return;
+        socket.join(`support:${ticketId}`);
+        logger.info(`🎫 Socket ${socket.id} joined support room: support:${ticketId}`);
+      });
+
+      socket.on('leave-support', ({ ticketId }) => {
+        if (!ticketId) return;
+        socket.leave(`support:${ticketId}`);
       });
 
       // ── LIVE TRACKING: Worker sends location updates ──────
