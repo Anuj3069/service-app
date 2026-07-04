@@ -16,9 +16,9 @@ const tokenBlacklist = require('../../shared/utils/token-blacklist');
  * Register a new user (customer or worker)
  */
 const register = asyncHandler(async (req, res) => {
-  const { name, email, phone, password, role } = req.body;
+  const { name, email, phone, password, role, gender, dateOfBirth } = req.body;
 
-  const result = await authService.register({ name, email, phone, password, role });
+  const result = await authService.register({ name, email, phone, password, role, gender, dateOfBirth });
 
   ApiResponse.created(res, result, 'Registration successful.');
 });

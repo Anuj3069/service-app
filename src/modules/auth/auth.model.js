@@ -29,6 +29,9 @@ const userSchema = new mongoose.Schema(
     phone: {
       type: String,
       trim: true,
+      required: [function () {
+        return this.role === ROLES.WORKER;
+      }, 'Phone number is required'],
       match: [/^\+?[\d\s-]{10,15}$/, 'Please provide a valid phone number'],
     },
     password: {
@@ -43,6 +46,19 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: Object.values(ROLES),
       default: ROLES.CUSTOMER,
+    },
+    gender: {
+      type: String,
+      enum: ['male', 'female', 'other'],
+      required: [function () {
+        return this.role === ROLES.WORKER;
+      }, 'Gender is required'],
+    },
+    dateOfBirth: {
+      type: Date,
+      required: [function () {
+        return this.role === ROLES.WORKER;
+      }, 'Date of birth is required'],
     },
     isActive: {
       type: Boolean,

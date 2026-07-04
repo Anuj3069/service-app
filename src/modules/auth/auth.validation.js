@@ -19,9 +19,15 @@ const registerSchema = {
         'string.email': 'Please provide a valid email address',
         'any.required': 'Email is required',
       }),
-    phone: Joi.string().pattern(/^\+?[\d\s-]{10,15}$/).optional()
+    phone: Joi.string().pattern(/^\+?[\d\s-]{10,15}$/)
+      .when('role', {
+        is: ROLES.WORKER,
+        then: Joi.required(),
+        otherwise: Joi.optional()
+      })
       .messages({
         'string.pattern.base': 'Please provide a valid phone number',
+        'any.required': 'Phone number is required',
       }),
     password: Joi.string().min(6).max(128)
       .when('role', {
@@ -36,6 +42,27 @@ const registerSchema = {
     role: Joi.string().valid(ROLES.CUSTOMER, ROLES.WORKER).default(ROLES.CUSTOMER)
       .messages({
         'any.only': `Role must be either '${ROLES.CUSTOMER}' or '${ROLES.WORKER}'`,
+      }),
+    gender: Joi.string().valid('male', 'female', 'other')
+      .when('role', {
+        is: ROLES.WORKER,
+        then: Joi.required(),
+        otherwise: Joi.optional()
+      })
+      .messages({
+        'any.only': 'Gender must be one of male, female or other',
+        'any.required': 'Gender is required',
+      }),
+    dateOfBirth: Joi.date().max(new Date(new Date().setFullYear(new Date().getFullYear() - 18)))
+      .when('role', {
+        is: ROLES.WORKER,
+        then: Joi.required(),
+        otherwise: Joi.optional()
+      })
+      .messages({
+        'date.max': 'You must be at least 18 years old to register as a worker',
+        'date.base': 'Please provide a valid date of birth',
+        'any.required': 'Date of birth is required',
       }),
   }),
 };

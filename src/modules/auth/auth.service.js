@@ -13,7 +13,7 @@ const { ROLES } = require('../../shared/utils/constants');
 class AuthService {
   /**
    * Register a new user
-   * @param {object} userData - { name, email, phone, password, role }
+   * @param {object} userData - { name, email, phone, password, role, gender, dateOfBirth }
    * @returns {object} { user, tokens }
    */
   async register(userData) {
