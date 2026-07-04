@@ -13,6 +13,7 @@ const AppError = require('../../shared/utils/api-error');
 const expiryScheduler = require('../../shared/utils/expiry-scheduler');
 const logger = require('../../config/logger');
 const { sendPushNotification } = require('../../shared/utils/push-notification');
+const { BOOKING_STATUS } = require('../../shared/utils/constants');
 
 // ─────────────────────────────────────────────────────────────
 //  CUSTOMER ENDPOINTS
@@ -169,7 +170,7 @@ const cancelUserBooking = asyncHandler(async (req, res) => {
       if (socketId) {
         io.to(socketId).emit('booking-cancelled', {
           bookingId: booking._id,
-          status: 'CANCELLED',
+          status: BOOKING_STATUS.CANCELLED,
           message: 'The customer cancelled this booking request.',
         });
       }
@@ -337,7 +338,7 @@ const acceptBooking = asyncHandler(async (req, res) => {
             id: providerId,
             name: req.user.name || 'Provider',
           },
-          status: 'ACCEPTED'
+          status: BOOKING_STATUS.ACCEPTED
         });
       }
     }
@@ -361,7 +362,7 @@ const acceptBooking = asyncHandler(async (req, res) => {
             id: providerId,
             name: req.user.name || 'Provider',
           },
-          status: 'ACCEPTED',
+          status: BOOKING_STATUS.ACCEPTED,
         });
       }
     }
@@ -389,7 +390,7 @@ const rejectBooking = asyncHandler(async (req, res) => {
     if (customerSocketId) {
       io.to(customerSocketId).emit('booking-rejected', {
         bookingId: booking._id,
-        status: 'REJECTED',
+        status: BOOKING_STATUS.REJECTED,
         message: 'Your scheduled booking request was rejected by the provider.',
       });
     }
