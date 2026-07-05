@@ -81,6 +81,14 @@ const serviceSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     }],
+    dos: [{
+      type: String,
+      trim: true,
+    }],
+    donts: [{
+      type: String,
+      trim: true,
+    }],
     searchRadiusKm: {
       type: Number,
       default: 10,       // Default 10 km if not set
