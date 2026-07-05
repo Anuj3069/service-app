@@ -6,7 +6,7 @@
  */
 
 const mongoose = require('mongoose');
-const { BOOKING_STATUS } = require('../../shared/utils/constants');
+const { BOOKING_STATUS, BOOKING_TYPE } = require('../../shared/utils/constants');
 
 const bookingSchema = new mongoose.Schema(
   {
@@ -62,13 +62,13 @@ const bookingSchema = new mongoose.Schema(
       type: String,
       required: [
         function () {
-          return this.type === 'SCHEDULED';
+          return this.type === 'SCHEDULED' && this.bookingType !== BOOKING_TYPE.BOOK_FOR_MONTH;
         },
         'Time slot is required',
       ],
       validate: {
         validator: function (v) {
-          if (this.type === 'INSTANT') return true;
+          if (this.type === 'INSTANT' || this.bookingType === BOOKING_TYPE.BOOK_FOR_MONTH) return true;
           return /^\d{2}:\d{2}-\d{2}:\d{2}$/.test(v);
         },
         message: 'Slot must be in format HH:MM-HH:MM',
