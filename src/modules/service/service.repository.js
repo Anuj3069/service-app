@@ -13,7 +13,7 @@ class ServiceRepository {
       .populate({
         path: 'services',
         match: { isActive: true },
-        select: 'name description basePrice monthBasePrice duration requiredSkills allowMonthBooking',
+        select: 'name description basePrice monthBasePrice duration requiredSkills allowMonthBooking dos donts',
       })
       .sort({ name: 1 });
   }
