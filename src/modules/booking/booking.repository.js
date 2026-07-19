@@ -20,7 +20,7 @@ class BookingRepository {
   async findById(id) {
     return Booking.findById(id)
       .populate('userId', 'name email phone')
-      .populate('serviceId', 'name basePrice duration')
+      .populate('serviceId', 'name basePrice duration dos donts')
       .populate({
         path: 'providerId',
         select: 'userId skills rating',
@@ -39,7 +39,7 @@ class BookingRepository {
   async findByUserId(userId, filters = {}) {
     const query = { userId, ...filters };
     return Booking.find(query)
-      .populate('serviceId', 'name basePrice duration')
+      .populate('serviceId', 'name basePrice duration dos donts')
       .populate({
         path: 'providerId',
         select: 'userId skills rating',
@@ -55,7 +55,7 @@ class BookingRepository {
     const query = { providerId, ...filters };
     return Booking.find(query)
       .populate('userId', 'name email phone')
-      .populate('serviceId', 'name basePrice duration')
+      .populate('serviceId', 'name basePrice duration dos donts')
       .sort({ createdAt: -1 });
   }
 
@@ -69,7 +69,7 @@ class BookingRepository {
       { new: true, runValidators: true }
     )
       .populate('userId', 'name email phone')
-      .populate('serviceId', 'name basePrice duration')
+      .populate('serviceId', 'name basePrice duration dos donts')
       .populate({
         path: 'providerId',
         select: 'userId skills rating',
@@ -150,7 +150,7 @@ class BookingRepository {
   async findByParentId(parentBookingId, filters = {}) {
     return Booking.find({ parentBookingId, ...filters })
       .populate('userId', 'name email phone')
-      .populate('serviceId', 'name basePrice monthBasePrice duration allowMonthBooking')
+      .populate('serviceId', 'name basePrice monthBasePrice duration allowMonthBooking dos donts')
       .populate({
         path: 'providerId',
         select: 'userId skills rating',

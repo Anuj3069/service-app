@@ -513,7 +513,7 @@ class BookingService {
       { new: true, runValidators: true }
     )
       .populate('userId', 'name email phone')
-      .populate('serviceId', 'name basePrice duration')
+      .populate('serviceId', 'name basePrice duration dos donts')
       .populate({
         path: 'providerId',
         select: 'userId skills rating',
@@ -592,7 +592,7 @@ class BookingService {
 
     return BookingModel.find(filters)
       .populate('userId', 'name email phone')
-      .populate('serviceId', 'name basePrice duration')
+      .populate('serviceId', 'name basePrice duration dos donts')
       .sort({ createdAt: -1 });
   }
 
@@ -638,7 +638,7 @@ class BookingService {
         },
         { new: true }
       ).populate('userId', 'name email phone')
-       .populate('serviceId', 'name basePrice duration');
+       .populate('serviceId', 'name basePrice duration dos donts');
 
       if (!updated) {
         throw AppError.gone('This booking has already been accepted by another provider or has expired.');
@@ -692,7 +692,7 @@ class BookingService {
       { new: true }
     )
       .populate('userId', 'name email phone')
-      .populate('serviceId', 'name basePrice duration')
+      .populate('serviceId', 'name basePrice duration dos donts')
       .populate({
         path: 'providerId',
         select: 'userId skills rating',
@@ -748,7 +748,7 @@ class BookingService {
       { new: true }
     )
       .populate('userId', 'name email phone')
-      .populate('serviceId', 'name basePrice duration')
+      .populate('serviceId', 'name basePrice duration dos donts')
       .populate({
         path: 'providerId',
         select: 'userId skills rating',

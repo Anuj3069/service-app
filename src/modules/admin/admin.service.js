@@ -417,7 +417,7 @@ class AdminService {
 
     const items = await Booking.find(query)
       .populate('userId', 'name email phone')
-      .populate('serviceId', 'name basePrice duration')
+      .populate('serviceId', 'name basePrice duration dos donts')
       .populate({
         path: 'providerId',
         select: 'userId skills rating',
