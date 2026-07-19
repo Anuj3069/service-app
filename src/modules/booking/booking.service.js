@@ -11,7 +11,7 @@
  */
 
 const AppError = require('../../shared/utils/api-error');
-const { BOOKING_STATUS, BOOKING_TRANSITIONS, BOOKING_TYPE, DURATION_HOURS } = require('../../shared/utils/constants');
+const { BOOKING_STATUS, BOOKING_TRANSITIONS, BOOKING_TYPE } = require('../../shared/utils/constants');
 const config = require('../../config');
 const logger = require('../../config/logger');
 const bookingRepository = require('./booking.repository');
@@ -128,7 +128,7 @@ class BookingService {
    * Book for Month — creates master + daily child bookings for the selected calendar month
    * Only available for services where admin has set allowMonthBooking: true
    */
-  async _handleMonthBooking(userId, { providerId, serviceId, durationType, monthStartDate, customerLocation }) {
+  async _handleMonthBooking(userId, { providerId, serviceId, monthStartDate, customerLocation }) {
     // 1. Validate service
     const service = await Service.findById(serviceId);
     if (!service || !service.isActive) {
@@ -149,10 +149,7 @@ class BookingService {
       throw AppError.badRequest('Provider is not currently available.');
     }
 
-    // 4. Resolve duration
-    const durationHours = this._assignDurationHours(durationType);
-
-    // 5. Compute working days for the selected month
+    // 4. Compute working days for the selected month
     const workingDays = this._getWorkingDaysInMonth(monthStartDate);
     if (workingDays.length === 0) {
       throw AppError.badRequest('No working days found in the selected month.');
@@ -161,7 +158,7 @@ class BookingService {
     const startDate = workingDays[0];
     const endDate   = workingDays[workingDays.length - 1];
 
-    // 6. Load commission rate
+    // 5. Load commission rate
     let commissionRate = 10;
     let expiryMinutes = config.booking.expiryMinutes;
     try {
@@ -175,13 +172,11 @@ class BookingService {
       logger.error('Failed to load settings during month booking:', e);
     }
 
-    // 7. Pricing — monthBasePrice is the half-day (9h) daily rate; full-day is 2x
+    // 6. Pricing — monthBasePrice is the flat daily rate
     if (!service.monthBasePrice) {
       throw AppError.badRequest('Monthly base price is not configured for this service.');
     }
-    const dailyRate = durationType === 'FULL_DAY'
-      ? service.monthBasePrice * 2
-      : service.monthBasePrice;
+    const dailyRate = service.monthBasePrice;
     const totalPrice = dailyRate * workingDays.length;
     const payout     = totalPrice * (1 - commissionRate / 100);
 
@@ -198,15 +193,13 @@ class BookingService {
       label:        customerLocation.label,
     } : undefined;
 
-    // 8. Create master booking (bookingSequence = 0, parentBookingId = null)
+    // 7. Create master booking (bookingSequence = 0, parentBookingId = null)
     const master = await bookingRepository.create({
       bookingType:    BOOKING_TYPE.BOOK_FOR_MONTH,
       type:           'SCHEDULED',
       userId,
       providerId,
       serviceId,
-      durationType,
-      durationHours,
       date:           startDate,
       slot:           null,
       price:          totalPrice,
@@ -225,7 +218,7 @@ class BookingService {
       customerLocation: locationData,
     });
 
-    // 9. Bulk-insert one child booking per working day
+    // 8. Bulk-insert one child booking per working day
     const childPayout = dailyRate * (1 - commissionRate / 100);
     const childData = workingDays.map((date, index) => ({
       bookingType:    BOOKING_TYPE.BOOK_FOR_MONTH,
@@ -233,8 +226,6 @@ class BookingService {
       userId,
       providerId,
       serviceId,
-      durationType,
-      durationHours,
       date,
       slot:           null,
       price:          dailyRate,
@@ -250,14 +241,13 @@ class BookingService {
 
     logger.info(
       `📅 Book-for-month created: master=${master._id} | provider=${providerId} | ` +
-      `days=${workingDays.length} | ${durationType} (${durationHours}h/day) | total=₹${totalPrice}`
+      `days=${workingDays.length} | total=₹${totalPrice}`
     );
 
     const populatedMaster = await bookingRepository.findById(master._id);
     return {
       master: populatedMaster,
       daysScheduled: workingDays.length,
-      durationHours,
       dailyPrice: dailyRate,
       totalPrice,
       monthStartDate: startDate,
@@ -266,15 +256,7 @@ class BookingService {
   }
 
   /**
-   * Auto-assign durationHours from durationType
-   * @private
-   */
-  _assignDurationHours(durationType) {
-    return DURATION_HOURS[durationType] ?? DURATION_HOURS.HALF_DAY;
-  }
-
-  /**
-   * Generate one Date per Mon–Sat working day in the calendar month of startDate
+   * Generate one Date per day in the calendar month of startDate (all 7 days, including Sunday)
    * @private
    */
   _getWorkingDaysInMonth(startDate) {
@@ -283,13 +265,10 @@ class BookingService {
     const month  = ref.getMonth();
     const cursor = new Date(year, month, 1);
     const end    = new Date(year, month + 1, 0);
-    const skip   = new Set([0]); // 0 = Sunday
 
     const days = [];
     while (cursor <= end) {
-      if (!skip.has(cursor.getDay())) {
-        days.push(new Date(cursor));
-      }
+      days.push(new Date(cursor));
       cursor.setDate(cursor.getDate() + 1);
     }
     return days;

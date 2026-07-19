@@ -233,8 +233,6 @@ const createMonthBooking = asyncHandler(async (req, res) => {
       io.to(socketId).emit('new-month-booking', {
         bookingId:     result.master._id,
         service:       { id: result.master.serviceId._id, name: result.master.serviceId.name },
-        durationType:  result.master.durationType,
-        durationHours: result.durationHours,
         daysScheduled: result.daysScheduled,
         totalPrice:    result.totalPrice,
         dailyPrice:    result.dailyPrice,
